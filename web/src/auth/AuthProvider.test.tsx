@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { ReactNode } from 'react';
+import { StrictMode, type ReactNode } from 'react';
 import { describe, expect, test, vi } from 'vitest';
 
 import { ApiError } from '../api/client';
@@ -66,6 +66,36 @@ describe('AuthProvider', () => {
     expect(gateway.createContext).not.toHaveBeenCalled();
     expect(screen.getByTestId('company')).toHaveTextContent('Estudio Aurora');
     expect(store.state.session?.contextId).toBe('ctx-old');
+  });
+
+  test('restaurar la sesión rota el refresh una sola vez aunque el efecto se repita', async () => {
+    const store = createMemorySessionStore({ refresh: 'refresh-old' });
+    let calls = 0;
+    const refresh = async () => {
+      calls += 1;
+      // El refresh rota y el token anterior queda bloqueado: un segundo intento falla.
+      if (calls > 1) throw new ApiError(401, 'Token inválido.');
+      return { access: 'access-1', refresh: 'refresh-new' };
+    };
+    const gateway = makeGateway({ refresh });
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <StrictMode>
+        <QueryClientProvider client={queryClient}>
+          <AuthProvider
+            gateway={gateway}
+            store={store}
+            runtime={{ accessToken: null, tenantContextId: null }}
+          >
+            <Probe />
+          </AuthProvider>
+        </QueryClientProvider>
+      </StrictMode>,
+    );
+
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('ready'));
+    expect(calls).toBe(1);
+    expect(store.state.refresh).toBe('refresh-new');
   });
 
   test('si el contexto guardado no es válido selecciona la única empresa accesible', async () => {

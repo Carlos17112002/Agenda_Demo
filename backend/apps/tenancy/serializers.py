@@ -1,3 +1,5 @@
+from django.conf import settings
+from django.core import signing
 from django.utils import timezone
 from PIL import Image
 from rest_framework import serializers
@@ -128,8 +130,16 @@ class TenantContextSerializer(serializers.ModelSerializer):
 
 def validate_new_company_email(email):
     from apps.identity.models import User
-    if User.objects.filter(email__iexact=email).exists():
-        raise serializers.ValidationError("Ya existe una cuenta con este correo.")
+    user = User.objects.filter(email__iexact=email).first()
+    if user is not None:
+        if user.is_active:
+            raise serializers.ValidationError(
+                "Ya existe una cuenta con este correo. Inicia sesión."
+            )
+        raise serializers.ValidationError(
+            "Ya existe un registro pendiente con este correo. "
+            "Revisa tu correo o solicita un reenvío."
+        )
     return email
 
 
@@ -139,32 +149,46 @@ def validate_new_company_slug(slug):
     return slug
 
 
+def suggest_company_slug(name):
+    from django.utils.text import slugify
+    base = slugify(name)[:90] or "empresa"
+    candidate, suffix = base, 2
+    while (Company.objects.filter(slug=candidate).exists()
+           or candidate in RESERVED_COMPANY_SLUGS):
+        candidate = f"{base}-{suffix}"
+        suffix += 1
+    return candidate
+
+
 def generate_temporary_password():
     from django.utils.crypto import get_random_string
     return f"{get_random_string(12)}-Aa1!"
 
 
 def provision_company(*, company_name, slug, email, password, first_name="",
-                      source, request=None, actor=None, plan=None, trial_days=None):
+                      source, request=None, actor=None, plan=None, trial_days=None,
+                      verified=True):
     from django.db import transaction
     from apps.identity.models import User
     from apps.audit.models import AuditEvent
     with transaction.atomic():
         company = Company.objects.create(name=company_name, slug=slug)
         user = User.objects.create_user(username=email, email=email, password=password,
-                                        first_name=first_name)
+                                        first_name=first_name, is_active=verified)
         Membership.objects.create(user=user, company=company, role=Membership.Role.OWNER)
         from apps.billing.services import default_plan, start_subscription
-        plan = plan or default_plan()
         subscription = None
-        if plan:
-            subscription = start_subscription(
-                company, plan, trial_days=trial_days, actor=actor or user,
-            )
+        if verified:
+            plan = plan or default_plan()
+            if plan:
+                subscription = start_subscription(
+                    company, plan, trial_days=trial_days, actor=actor or user,
+                )
         AuditEvent.objects.create(company=company, actor=actor or user,
             action="company.registered", entity_type="Company", entity_id=str(company.id),
             metadata={
                 "source": source,
+                "plan": plan.code if plan else None,
                 "remote_addr": request.META.get("REMOTE_ADDR") if request else None,
                 "user_agent": (request.META.get("HTTP_USER_AGENT", "")[:240] if request else ""),
             })
@@ -173,28 +197,49 @@ def provision_company(*, company_name, slug, email, password, first_name="",
 
 class CompanyRegistrationSerializer(serializers.Serializer):
     company_name = serializers.CharField(max_length=180)
-    slug = serializers.SlugField(max_length=100)
+    slug = serializers.SlugField(max_length=100, required=False, allow_blank=True)
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True, min_length=12, max_length=128)
     first_name = serializers.CharField(max_length=150, required=False, allow_blank=True)
+    plan = serializers.CharField(required=False, allow_blank=True)
+
     def validate_email(self, email):
         return validate_new_company_email(email)
+
     def validate_slug(self, slug):
-        return validate_new_company_slug(slug)
+        return validate_new_company_slug(slug) if slug else ""
+
+    def validate_plan(self, code):
+        if not code:
+            return None
+        from apps.billing.models import Plan
+        plan = Plan.objects.filter(code=code, active=True).first()
+        if plan is None:
+            raise serializers.ValidationError("El plan no está disponible.")
+        return plan
+
     def validate_password(self, password):
         from django.contrib.auth.password_validation import validate_password
         validate_password(password)
         return password
+
     def create(self, validated_data):
-        return provision_company(
-            company_name=validated_data["company_name"],
-            slug=validated_data["slug"],
+        from .verification import send_verification_email
+        company_name = validated_data["company_name"]
+        plan = validated_data.get("plan")
+        company, user, _ = provision_company(
+            company_name=company_name,
+            slug=validated_data.get("slug") or suggest_company_slug(company_name),
             email=validated_data.pop("email"),
             password=validated_data.pop("password"),
             first_name=validated_data.pop("first_name", ""),
             source="public_registration",
             request=self.context.get("request"),
+            plan=plan,
+            verified=False,
         )
+        send_verification_email(user, plan=plan)
+        return company, user
 
 
 class SaasCompanyCreateSerializer(serializers.Serializer):
@@ -309,3 +354,67 @@ class PermissionGrantSerializer(serializers.ModelSerializer):
         if membership.role in ["owner", "admin"] and actor.role != "owner":
             raise serializers.ValidationError("Solo el propietario puede modificar permisos de administración.")
         return attrs
+
+
+class VerifyEmailSerializer(serializers.Serializer):
+    token = serializers.CharField()
+
+    def validate_token(self, token):
+        from apps.identity.models import User
+        try:
+            payload = signing.loads(
+                token, salt="identity.email-verification",
+                max_age=settings.EMAIL_VERIFICATION_TIMEOUT,
+            )
+        except (signing.BadSignature, signing.SignatureExpired):
+            raise serializers.ValidationError("El enlace no es válido o venció.")
+        user = User.objects.filter(pk=payload.get("uid")).first()
+        if user is None:
+            raise serializers.ValidationError("El enlace no es válido o venció.")
+        if user.is_active:
+            raise serializers.ValidationError("La cuenta ya está verificada.")
+        self._user = user
+        self._plan_code = payload.get("plan") or ""
+        return token
+
+    def create(self, validated_data):
+        from django.db import transaction
+        from apps.audit.services import record_event
+        from apps.billing.models import Plan
+        from apps.billing.services import default_plan, start_subscription
+        user = self._user
+        with transaction.atomic():
+            user.is_active = True
+            user.save(update_fields=["is_active"])
+            company = user.memberships.select_related("company").get(active=True).company
+            plan = Plan.objects.filter(code=self._plan_code, active=True).first()
+            plan = plan or default_plan()
+            subscription = start_subscription(company, plan, actor=user) if plan else None
+            record_event(
+                company=company, actor=user, action="company.email_verified",
+                instance=company, metadata={"plan": plan.code if plan else None},
+            )
+        return user, company, subscription
+
+
+class ResendVerificationSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+    def create(self, validated_data):
+        from apps.audit.models import AuditEvent
+        from apps.billing.models import Plan
+        from apps.identity.models import User
+        from .verification import send_verification_email
+        user = User.objects.filter(
+            email__iexact=validated_data["email"], is_active=False,
+        ).first()
+        if user is not None:
+            membership = user.memberships.filter(active=True).select_related("company").first()
+            if membership is not None:
+                event = AuditEvent.objects.filter(
+                    company=membership.company, action="company.registered",
+                ).order_by("-occurred_at").first()
+                code = (event.metadata or {}).get("plan") if event else None
+                plan = Plan.objects.filter(code=code, active=True).first() if code else None
+                send_verification_email(user, plan=plan)
+        return validated_data["email"]

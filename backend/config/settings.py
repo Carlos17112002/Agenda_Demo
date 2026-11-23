@@ -67,6 +67,8 @@ AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
 PASSWORD_RESET_TIMEOUT = 60 * 60
+EMAIL_VERIFICATION_TIMEOUT = 60 * 60 * 48
+AGENDA_WEB_BASE_URL = os.getenv("AGENDA_WEB_BASE_URL", "http://127.0.0.1:5173").rstrip("/")
 EMAIL_BACKEND = os.getenv("DJANGO_EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "no-reply@agenda.local")
 MOBILE_PUSH_PROVIDER = os.getenv("AGENDA_PUSH_PROVIDER", "console")
@@ -103,7 +105,7 @@ REST_FRAMEWORK = {
     "PAGE_SIZE": 50,
     "DEFAULT_FILTER_BACKENDS": ["rest_framework.filters.SearchFilter", "rest_framework.filters.OrderingFilter"],
     "DEFAULT_THROTTLE_CLASSES": ["rest_framework.throttling.AnonRateThrottle", "rest_framework.throttling.UserRateThrottle"],
-    "DEFAULT_THROTTLE_RATES": {"anon": "120/minute", "user": "300/minute", "login": "5/minute", "password_reset": "3/hour", "password_reset_confirm": "10/hour", "registration": "5/hour", "public": "30/minute", "password_change": "10/hour"},
+    "DEFAULT_THROTTLE_RATES": {"anon": "120/minute", "user": "300/minute", "login": "5/minute", "password_reset": "3/hour", "password_reset_confirm": "10/hour", "registration": "5/hour", "email_verification": "10/hour", "resend_verification": "3/hour", "public": "30/minute", "password_change": "10/hour"},
     "NUM_PROXIES": int(os.getenv("DJANGO_NUM_PROXIES", "0")) or None,
 }
 BOOKING_SLOT_STEP_MINUTES = 15

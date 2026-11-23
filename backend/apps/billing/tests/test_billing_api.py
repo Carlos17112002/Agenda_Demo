@@ -1,6 +1,6 @@
 from datetime import timedelta
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
@@ -256,28 +256,30 @@ class SaasAdminApiTests(BillingScenarioMixin, TestCase):
 
 
 class RegistrationAndLegacyTests(TestCase):
-    def test_registration_uses_default_plan_trial(self):
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+    def test_verified_registration_uses_default_plan_trial(self):
+        import re
+        from urllib.parse import unquote
+        from django.core import mail
         plan = make_plan("starter-default", trial_days=7, is_default=True)
         response = APIClient().post("/api/v1/auth/register-company/", {
-            "company_name": "Nueva SaaS", "slug": "nueva-saas",
-            "email": "owner-nueva@example.com",
+            "company_name": "Nueva SaaS", "email": "owner-nueva@example.com",
             "password": "Strong-Horse-Battery-483!", "first_name": "Dueña",
         }, format="json")
         self.assertEqual(response.status_code, 201, response.data)
         company = Company.objects.get(slug="nueva-saas")
+        self.assertFalse(Subscription.objects.filter(company=company).exists())
+
+        token = unquote(re.search(r"/verificar\?token=(\S+)", mail.outbox[-1].body).group(1))
+        verified = APIClient().post("/api/v1/auth/verify-email/", {"token": token}, format="json")
+        self.assertEqual(verified.status_code, 200, verified.data)
+
         subscription = Subscription.objects.get(company=company)
         self.assertEqual(subscription.plan_id, plan.id)
         self.assertEqual(subscription.status, Subscription.Status.TRIALING)
         self.assertGreater(subscription.trial_ends_at, timezone.now())
         self.assertEqual(company.status, "trial")
         self.assertEqual(Membership.objects.get(company=company).role, Membership.Role.OWNER)
-
-        plans = APIClient().get("/api/v1/plans/")
-        self.assertEqual(plans.status_code, 200)
-        codes = [row["code"] for row in plans.data["results"]]
-        self.assertIn("starter-default", codes)
-        default = next(row for row in plans.data["results"] if row["code"] == "starter-default")
-        self.assertTrue(default["is_default"])
 
     def test_company_without_subscription_keeps_legacy_access(self):
         company = make_company("legacy-co", "Legacy")

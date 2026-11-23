@@ -13,6 +13,8 @@ import { ServicesPage } from '../features/services/ServicesPage';
 import { SummaryPage } from '../features/summary/SummaryPage';
 import { TeamPage } from '../features/team/TeamPage';
 import { AppLayout } from './AppLayout';
+import { PublicPricingPage } from '../features/public/PublicPricingPage';
+import { VerifyEmailPage } from '../features/public/VerifyEmailPage';
 import { SaasAdminLayout } from '../features/saas/SaasAdminLayout';
 import { SaasCompaniesPage } from '../features/saas/SaasCompaniesPage';
 import { SaasPlansPage } from '../features/saas/SaasPlansPage';
@@ -29,6 +31,8 @@ import {
 import { HomeRedirect } from './HomeRedirect';
 
 export const routeObjects: RouteObject[] = [
+  { path: '/precios', element: <PublicPricingPage /> },
+  { path: '/verificar', element: <VerifyEmailPage /> },
   { path: '/login', element: <LoginPage /> },
   {
     path: '/empresa',

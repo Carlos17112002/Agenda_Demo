@@ -1,7 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 
 import { ApiError } from '../../api/client';
@@ -79,6 +79,11 @@ export function LoginPage() {
             Entrar
           </Button>
         </form>
+
+        <p className="mt-4 text-center text-sm text-muted">
+          ¿Aún no tienes cuenta?{' '}
+          <Link to="/precios" className="font-medium text-brand hover:underline">Ver planes</Link>
+        </p>
       </section>
     </main>
   );

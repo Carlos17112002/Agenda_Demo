@@ -18,7 +18,7 @@ from .permissions import (
 from .serializers import (
     BranchSerializer, CompanyBrandingSerializer, CompanyLogoSerializer,
     CompanyRegistrationSerializer, CompanySerializer, PermissionGrantSerializer,
-    TenantContextSerializer,
+    ResendVerificationSerializer, TenantContextSerializer, VerifyEmailSerializer,
 )
 
 
@@ -128,10 +128,52 @@ class CompanyRegistrationView(viewsets.ViewSet):
     def create(self, request):
         serializer = CompanyRegistrationSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        company, user, _ = serializer.save()
-        return Response({"company_id": str(company.id), "company_name": company.name,
-            "owner_id": str(user.id), "detail": "Empresa creada. Inicia sesión para acceder."},
-            status=status.HTTP_201_CREATED)
+        company, user = serializer.save()
+        return Response({
+            "company_id": str(company.id), "company_name": company.name,
+            "email": user.email,
+            "detail": "Revisa tu correo para activar tu cuenta.",
+        }, status=status.HTTP_201_CREATED)
+
+
+class EmailVerificationRateThrottle(AnonRateThrottle):
+    scope = "email_verification"
+
+
+class ResendVerificationRateThrottle(AnonRateThrottle):
+    scope = "resend_verification"
+
+
+class VerifyEmailView(APIView):
+    permission_classes = [permissions.AllowAny]
+    authentication_classes = []
+    throttle_classes = [EmailVerificationRateThrottle]
+
+    def post(self, request):
+        from rest_framework_simplejwt.tokens import RefreshToken
+        from apps.identity.views import user_payload
+        serializer = VerifyEmailSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user, _, _ = serializer.save()
+        refresh = RefreshToken.for_user(user)
+        return Response({
+            "access": str(refresh.access_token), "refresh": str(refresh),
+            "user": user_payload(user),
+        })
+
+
+class ResendVerificationView(APIView):
+    permission_classes = [permissions.AllowAny]
+    authentication_classes = []
+    throttle_classes = [ResendVerificationRateThrottle]
+
+    def post(self, request):
+        serializer = ResendVerificationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response({
+            "detail": "Si el correo tiene un registro pendiente, enviamos un nuevo enlace.",
+        })
 
 
 class TenantContextViewSet(viewsets.GenericViewSet):

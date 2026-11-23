@@ -8,6 +8,7 @@ import type { UUID } from './types';
 const list = (name: string, companyId: UUID, params: object) => [name, companyId, params] as const;
 
 export const queryKeys = {
+  publicPlans: () => ['public-plans'] as const,
   bookings: (companyId: UUID, params: BookingListParams) => list('bookings', companyId, params),
   availability: (companyId: UUID, params: AvailabilityParams) =>
     list('availability', companyId, params),

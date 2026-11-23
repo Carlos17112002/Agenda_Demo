@@ -182,3 +182,43 @@ export type TenantContextResponse = {
   company_name: string;
   expires_at: string;
 };
+
+export type PublicPlanFeature = {
+  code: string;
+  enabled: boolean;
+  limit_value: number | null;
+};
+
+export type PublicPlan = {
+  id: UUID;
+  code: string;
+  name: string;
+  description: string;
+  price: string;
+  currency: string;
+  billing_period: 'monthly' | 'yearly';
+  trial_days: number;
+  is_default: boolean;
+  features: PublicPlanFeature[];
+};
+
+export type RegisterCompanyInput = {
+  company_name: string;
+  email: string;
+  password: string;
+  first_name?: string;
+  plan?: string;
+};
+
+export type RegisterCompanyResponse = {
+  company_id: UUID;
+  company_name: string;
+  email: string;
+  detail: string;
+};
+
+export type VerifyEmailResponse = {
+  access: string;
+  refresh: string;
+  user: User;
+};

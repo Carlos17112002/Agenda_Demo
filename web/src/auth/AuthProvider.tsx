@@ -5,6 +5,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -84,6 +85,21 @@ export function AuthProvider({ children, gateway, store, runtime }: Props) {
   const [company, setCompany] = useState<BootstrapCompany | null>(null);
   const [bootstrap, setBootstrap] = useState<Bootstrap | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // El refresh rota el token: dos intentos concurrentes con el mismo valor
+  // dejan la sesión inválida (el segundo recibe 401 y la borra).
+  const bootRefresh = useRef<Promise<RefreshResponse> | null>(null);
+
+  const refreshBootTokens = useCallback(
+    (refresh: string) => {
+      if (!bootRefresh.current) {
+        bootRefresh.current = gateway.refresh(refresh).finally(() => {
+          bootRefresh.current = null;
+        });
+      }
+      return bootRefresh.current;
+    },
+    [gateway],
+  );
 
   const clearLocalSession = useCallback(() => {
     runtime.accessToken = null;
@@ -132,7 +148,7 @@ export function AuthProvider({ children, gateway, store, runtime }: Props) {
         return;
       }
       try {
-        const tokens = await gateway.refresh(refresh);
+        const tokens = await refreshBootTokens(refresh);
         if (cancelled) return;
         runtime.accessToken = tokens.access;
         if (tokens.refresh) store.writeRefresh(tokens.refresh);
@@ -198,7 +214,7 @@ export function AuthProvider({ children, gateway, store, runtime }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [activateCompany, applyBootstrap, clearLocalSession, gateway, runtime, store]);
+  }, [activateCompany, applyBootstrap, clearLocalSession, gateway, refreshBootTokens, runtime, store]);
 
   const login = useCallback(
     async (email: string, password: string) => {

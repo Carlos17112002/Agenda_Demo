@@ -41,7 +41,8 @@ from apps.sales.views import (
 )
 from apps.tenancy.views import (
     BranchViewSet, CompanyBrandingView, CompanyLogoView, CompanyRegistrationView,
-    MyCompaniesView, PermissionGrantViewSet, TenantContextViewSet,
+    MyCompaniesView, PermissionGrantViewSet, ResendVerificationView,
+    TenantContextViewSet, VerifyEmailView,
 )
 from apps.workforce.views import (
     BlockedSlotViewSet, BreakViewSet, TimeOffViewSet, WorkerProfileViewSet, WorkingHoursViewSet,
@@ -99,6 +100,8 @@ urlpatterns = [
     path("api/v1/auth/password-reset/confirm/", PasswordResetConfirmView.as_view(), name="password-reset-confirm"),
     path("api/v1/auth/password/change/", PasswordChangeView.as_view(), name="password-change"),
     path("api/v1/auth/register-company/", CompanyRegistrationView.as_view({"post": "create"}), name="register-company"),
+    path("api/v1/auth/verify-email/", VerifyEmailView.as_view(), name="verify-email"),
+    path("api/v1/auth/resend-verification/", ResendVerificationView.as_view(), name="resend-verification"),
     path("api/v1/company/branding/", CompanyBrandingView.as_view(), name="company-branding"),
     path("api/v1/company/branding/logo/", CompanyLogoView.as_view(), name="company-branding-logo"),
     path("api/v1/public/<slug:slug>/", PublicCompanyView.as_view(), name="public-company"),
