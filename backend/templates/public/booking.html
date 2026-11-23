@@ -1,0 +1,140 @@
+{% load static %}<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="index,follow">
+  <title>{{ branding.display_name }} · Reserva tu hora</title>
+  {% if branding.logo_url %}<link rel="icon" href="{{ branding.logo_url }}">{% endif %}
+  <link rel="stylesheet" href="{% static 'public/booking.css' %}">
+  <style>
+    :root { --brand:{{ branding.primary_color }}; --brand-dark:{{ branding.secondary_color }}; --on-brand:#FFFFFF; }
+  </style>
+</head>
+<body data-theme="{{ branding.theme_mode }}">
+  <header class="topbar">
+    <div class="brand">
+      {% if branding.logo_url %}
+        <img class="brand-logo" src="{{ branding.logo_url }}" alt="Logo de {{ branding.display_name }}">
+      {% else %}
+        <span class="brand-initial" aria-hidden="true">{{ branding.display_name|slice:":1" }}</span>
+      {% endif %}
+      <div>
+        <p class="eyebrow">Reserva en línea</p>
+        <h1>{{ branding.display_name }}</h1>
+      </div>
+    </div>
+  </header>
+
+  <main id="booking-app" class="shell"
+        data-company-url="{{ company_url }}"
+        data-availability-url="{{ availability_url }}"
+        data-bookings-url="{{ bookings_url }}"
+        data-detail-base="{{ detail_base }}"
+        data-cancel-base="{{ cancel_base }}"
+        data-initial-code="{{ initial_code }}"
+        data-primary-color="{{ branding.primary_color }}">
+    <noscript>
+      <p class="alert">Activa JavaScript en tu navegador para reservar en línea.</p>
+    </noscript>
+
+    <section id="booking-view" aria-labelledby="booking-heading">
+      <div class="intro">
+        <p class="eyebrow">Agenda tu visita</p>
+        <h2 id="booking-heading">Elige servicio, profesional y horario.</h2>
+        <p class="lede">Te enviaremos la confirmación por correo. Puedes cancelar en línea con tu código de reserva.</p>
+      </div>
+
+      <div id="load-error" class="alert" role="alert" hidden></div>
+
+      <section class="panel" aria-labelledby="service-heading">
+        <div class="panel-head">
+          <span class="step">01</span>
+          <h3 id="service-heading">Servicio</h3>
+        </div>
+        <div id="service-list" class="service-grid">
+          {% for service in payload.services %}
+            <button type="button" class="service-card" data-service-id="{{ service.id }}">
+              <strong>{{ service.name }}</strong>
+              <span>{{ service.duration_minutes }} min · ${{ service.price }}</span>
+            </button>
+          {% empty %}
+            <p class="muted">No hay servicios disponibles por ahora.</p>
+          {% endfor %}
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="schedule-heading">
+        <div class="panel-head">
+          <span class="step">02</span>
+          <h3 id="schedule-heading">Sucursal, profesional y fecha</h3>
+        </div>
+        <div class="field-grid">
+          <label class="field">
+            <span>Sucursal</span>
+            <select id="branch-select" required>
+              {% for branch in payload.branches %}
+                <option value="{{ branch.id }}">{{ branch.name }}{% if branch.address %} · {{ branch.address }}{% endif %}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label class="field">
+            <span>Profesional</span>
+            <select id="worker-select" required>
+              <option value="">Elige profesional</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Fecha</span>
+            <input id="date-input" type="date" required>
+          </label>
+        </div>
+        <div class="slots-head">
+          <h4>Horarios disponibles</h4>
+          <span id="slots-status" class="muted" role="status">Elige servicio y profesional.</span>
+        </div>
+        <div id="slot-list" class="slot-grid" role="group" aria-label="Horarios disponibles"></div>
+      </section>
+
+      <section id="contact-panel" class="panel" aria-labelledby="contact-heading" hidden>
+        <div class="panel-head">
+          <span class="step">03</span>
+          <h3 id="contact-heading">Tus datos</h3>
+        </div>
+        <p id="selection-summary" class="selection"></p>
+        <form id="booking-form">
+          <div class="field-grid">
+            <label class="field"><span>Nombre</span><input name="first_name" autocomplete="given-name" maxlength="120" required></label>
+            <label class="field"><span>Apellido</span><input name="last_name" autocomplete="family-name" maxlength="120"></label>
+            <label class="field"><span>Correo</span><input name="email" type="email" autocomplete="email" maxlength="254" required></label>
+            <label class="field"><span>Teléfono</span><input name="phone" type="tel" autocomplete="tel" maxlength="32"></label>
+          </div>
+          <label class="field"><span>Notas (opcional)</span><textarea name="notes" rows="3" maxlength="500"></textarea></label>
+          <div id="form-error" class="alert" role="alert" hidden></div>
+          <button id="submit-booking" class="primary" type="submit">Confirmar reserva</button>
+        </form>
+      </section>
+    </section>
+
+    <section id="confirmation-view" aria-labelledby="confirmation-heading" hidden>
+      <div class="panel confirmation">
+        <span class="status-pill" id="confirmation-status">Reserva confirmada</span>
+        <h2 id="confirmation-heading">Tu hora está reservada.</h2>
+        <p class="lede">Guarda este código para consultar o cancelar tu reserva.</p>
+        <p class="code" id="confirmation-code"></p>
+        <dl class="detail-list" id="confirmation-detail"></dl>
+        <div id="cancel-error" class="alert" role="alert" hidden></div>
+        <div class="actions">
+          <button id="cancel-booking" class="danger" type="button">Cancelar reserva</button>
+          <button id="new-booking" class="ghost" type="button">Hacer otra reserva</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">Reservas en línea · {{ branding.display_name }}</footer>
+
+  {{ payload|json_script:"public-company-data" }}
+  <script src="{% static 'public/booking.js' %}" defer></script>
+</body>
+</html>

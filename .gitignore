@@ -1,0 +1,26 @@
+.env
+.venv/
+__pycache__/
+*.py[cod]
+backend/db.sqlite3
+backend/staticfiles/
+media/
+backend/private-media/
+backend/private-media-test/
+.pytest_cache/
+web/node_modules/
+web/dist/
+web/.env
+web/.env.local
+web/playwright-report/
+web/test-results/
+web/.env.e2e
+web/.env.production
+web/e2e/.auth/
+web/.visual/
+
+# Pruebas de carga
+backend/loadtest.sqlite3
+backend/loadtest/result_*
+backend/loadtest/results_*
+backend/loadtest/server_*.log
