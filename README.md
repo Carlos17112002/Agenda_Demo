@@ -157,4 +157,15 @@ Enviar `Authorization: Bearer <access>` en las rutas protegidas. Para operacione
 
 ## Configuración
 
-Variables: `DJANGO_SECRET_KEY`, `DJANGO_DEBUG`, `DJANGO_ALLOWED_HOSTS`, `DJANGO_CORS_ORIGINS`, `AGENDA_USE_POSTGRES`, `DATABASE_URL`, `DJANGO_EMAIL_BACKEND`, `DEFAULT_FROM_EMAIL`, `AGENDA_PUSH_PROVIDER`, `AGENDA_PUSH_WEBHOOK_URL`, `AGENDA_PUSH_TOKEN`, `AGENDA_PUBLIC_BASE_URL`. PostgreSQL solo se activa con `AGENDA_USE_POSTGRES=true` y `DATABASE_URL`; instala el driver `psycopg[binary]` incluido en requirements cuando llegue la migración. `AGENDA_PUBLIC_BASE_URL` define la base absoluta del enlace público de reservas (por defecto `http://localhost:8000`). Los logos se guardan en `MEDIA_ROOT` y, en desarrollo, se sirven bajo `/media/`; en producción usa almacenamiento de objetos o el servidor web.
+Variables: `DJANGO_SECRET_KEY`, `DJANGO_DEBUG`, `DJANGO_ALLOWED_HOSTS`, `DJANGO_CSRF_TRUSTED_ORIGINS`, `DJANGO_CORS_ORIGINS`, `DJANGO_TRUST_PROXY_HEADERS`, `DJANGO_TRUSTED_PROXY_COUNT`, `DJANGO_NUM_PROXIES`, `AGENDA_USE_POSTGRES`, `DATABASE_URL`, `DJANGO_EMAIL_BACKEND`, `DEFAULT_FROM_EMAIL`, `AGENDA_PUSH_PROVIDER`, `AGENDA_PUSH_WEBHOOK_URL`, `AGENDA_PUSH_TOKEN`, `AGENDA_PUBLIC_BASE_URL`, `AGENDA_SERVE_MEDIA`, `AGENDA_SUPERADMIN_EMAIL`, `AGENDA_SUPERADMIN_PASSWORD`. PostgreSQL solo se activa con `AGENDA_USE_POSTGRES=true` y `DATABASE_URL`; instala el driver `psycopg[binary]` incluido en requirements cuando llegue la migración. `AGENDA_PUBLIC_BASE_URL` define la base absoluta del enlace público de reservas (por defecto `http://localhost:8000`). Los logos se guardan en `MEDIA_ROOT` y, en desarrollo, se sirven bajo `/media/`; en producción usa almacenamiento de objetos o el servidor web.
+
+## Despliegue en Render
+
+`render.yaml` define una API Django (Gunicorn + WhiteNoise) con PostgreSQL gratuito y el panel web como sitio estático. En Render: **New → Blueprint**, conecta el repositorio y completa las variables marcadas como secretas (`AGENDA_SUPERADMIN_EMAIL`, `AGENDA_SUPERADMIN_PASSWORD`, `AGENDA_SUPERADMIN_FIRST_NAME`).
+
+Cuando ambos servicios estén vivos:
+
+- Panel: `https://agenda-demo-panel.onrender.com`
+- Admin Django: `https://agenda-demo-api.onrender.com/admin/`
+
+El plan gratuito duerme la API tras 15 minutos sin tráfico (el primer acceso tarda ~1 minuto) y la base PostgreSQL gratuita expira; los archivos subidos a `MEDIA_ROOT` se pierden en cada redeploy. Los comandos `bootstrap_superadmin` (crea el superadmin desde las variables, sin sobrescribir) y `bootstrap_demo` no se ejecutan solos salvo el primero, incluido en el arranque.
