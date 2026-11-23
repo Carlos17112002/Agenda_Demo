@@ -12,6 +12,8 @@ import { ServicesPage } from '../features/services/ServicesPage';
 import { SummaryPage } from '../features/summary/SummaryPage';
 import { TeamPage } from '../features/team/TeamPage';
 import { AppLayout } from './AppLayout';
+import { SaasAdminLayout } from '../features/saas/SaasAdminLayout';
+import { SaasCompaniesPage } from '../features/saas/SaasCompaniesPage';
 import {
   AccessDeniedPage,
   ForcePasswordChange,
@@ -19,6 +21,7 @@ import {
   RequireAuthenticated,
   RequirePermission,
   RequireReady,
+  RequireSaasAdmin,
 } from './guards';
 import { HomeRedirect } from './HomeRedirect';
 
@@ -31,6 +34,15 @@ export const routeObjects: RouteObject[] = [
         <CompanyChooserPage />
       </RequireAuthenticated>
     ),
+  },
+  {
+    path: '/saas',
+    element: (
+      <RequireSaasAdmin>
+        <SaasAdminLayout />
+      </RequireSaasAdmin>
+    ),
+    children: [{ index: true, element: <SaasCompaniesPage /> }],
   },
   {
     path: '/cambiar-clave',

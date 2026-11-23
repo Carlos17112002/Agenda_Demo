@@ -117,6 +117,7 @@ export function makeGateway(overrides: Partial<AuthGateway> = {}): AuthGateway {
         (async () => ({ access: 'access-a', refresh: 'refresh-a', user: makeUser() })),
     ),
     refresh: vi.fn(overrides.refresh ?? (async () => ({ access: 'access-r', refresh: 'refresh-r' }))),
+    me: vi.fn(overrides.me ?? (async () => makeUser())),
     companies: vi.fn(overrides.companies ?? (async () => [makeCompany()])),
     createContext: vi.fn(
       overrides.createContext ??
@@ -140,6 +141,7 @@ export function makeAuthValue(overrides: Partial<AuthContextValue> = {}): AuthCo
   const bootstrap = overrides.bootstrap ?? makeBootstrap();
   return {
     status: 'ready',
+    isSaasAdmin: false,
     user: bootstrap.user,
     companies: bootstrap.companies,
     company: bootstrap.company,

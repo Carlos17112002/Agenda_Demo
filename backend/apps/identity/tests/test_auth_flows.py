@@ -76,6 +76,35 @@ class AuthenticationFlowTests(TestCase):
         self.assertEqual(response.status_code, 200, response.data)
         self.assertEqual(response.data["user"]["email"], self.user.email)
         self.assertTrue(response.data["user"]["is_saas_admin"])
+        self.assertFalse(response.data["user"]["is_superuser"])
+
+    def test_login_identifies_django_superuser(self):
+        self.user.is_staff = True
+        self.user.is_superuser = True
+        self.user.save(update_fields=["is_staff", "is_superuser"])
+
+        response = APIClient().post("/api/v1/auth/token/", {
+            "email": self.user.email, "password": "Correct-Horse-Battery-983!"
+        }, format="json")
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertTrue(response.data["user"]["is_superuser"])
+
+    def test_me_returns_current_user_flags(self):
+        self.user.is_saas_admin = True
+        self.user.save(update_fields=["is_saas_admin"])
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.get("/api/v1/auth/me/")
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["email"], self.user.email)
+        self.assertTrue(response.data["is_saas_admin"])
+        self.assertFalse(response.data["is_superuser"])
+
+    def test_me_requires_authentication(self):
+        response = APIClient().get("/api/v1/auth/me/")
+        self.assertEqual(response.status_code, 401)
 
     def test_logout_blacklists_refresh_token(self):
         refresh = RefreshToken.for_user(self.user)

@@ -22,6 +22,7 @@ class BootstrapSuperadminTests(TestCase):
         user = User.objects.get(email="jefe@agenda.app")
         self.assertTrue(user.is_superuser)
         self.assertTrue(user.is_staff)
+        self.assertTrue(user.is_saas_admin)
         self.assertTrue(user.is_active)
         self.assertTrue(user.check_password(SUPERADMIN_ENV["AGENDA_SUPERADMIN_PASSWORD"]))
 

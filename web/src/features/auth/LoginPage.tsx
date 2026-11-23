@@ -38,6 +38,7 @@ export function LoginPage() {
       navigate(from ?? firstAllowedPath(can, hasFeature), { replace: true });
     }
     if (status === 'choosingCompany') navigate('/empresa', { replace: true });
+    if (status === 'saasAdmin') navigate('/saas', { replace: true });
   }, [can, hasFeature, location.state, navigate, status]);
 
   async function onSubmit(values: FormValues) {

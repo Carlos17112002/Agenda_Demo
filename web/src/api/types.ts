@@ -9,6 +9,7 @@ export type User = {
   first_name: string;
   last_name: string;
   is_saas_admin: boolean;
+  is_superuser?: boolean;
   must_change_password?: boolean;
 };
 
@@ -82,6 +83,63 @@ export type LoginResponse = {
 export type RefreshResponse = {
   access: string;
   refresh?: string;
+};
+
+export type SaasSubscription = {
+  id: UUID;
+  plan: string;
+  status: string;
+  effective_status: string;
+  usable: boolean;
+  current_period_end: ISODateTime | null;
+  trial_ends_at: ISODateTime | null;
+};
+
+export type SaasCompany = {
+  id: UUID;
+  name: string;
+  slug: string;
+  legal_name: string;
+  tax_identifier: string;
+  status: string;
+  created_at: ISODateTime;
+  updated_at: ISODateTime;
+  subscription: SaasSubscription | null;
+};
+
+export type SaasPlan = {
+  id: UUID;
+  code: string;
+  name: string;
+  description: string;
+  price: string;
+  currency: string;
+  billing_period: 'monthly' | 'yearly';
+  trial_days: number;
+  active: boolean;
+};
+
+export type SaasCompanyCreateInput = {
+  company_name: string;
+  slug: string;
+  email: string;
+  first_name?: string;
+  password?: string;
+  plan?: string;
+  trial_days?: number;
+};
+
+export type SaasCompanyCreateResult = {
+  company_id: UUID;
+  company_name: string;
+  slug: string;
+  owner_id: UUID;
+  owner_email: string;
+  owner_name: string;
+  temporary_password: string;
+  booking_url: string;
+  subscription: SaasSubscription | null;
+  detail: string;
 };
 
 export type PasswordChangeResponse = {

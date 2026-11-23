@@ -9,7 +9,7 @@ from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenRefreshView
 from apps.identity.member_views import MembershipViewSet
 from apps.identity.views import (
-    LoginView, LogoutView, PasswordChangeView, PasswordResetConfirmView,
+    LoginView, LogoutView, MeView, PasswordChangeView, PasswordResetConfirmView,
     PasswordResetRequestView,
 )
 from apps.bookings.public import (
@@ -94,6 +94,7 @@ urlpatterns = [
     path("api/v1/auth/token/", LoginView.as_view(), name="token_obtain_pair"),
     path("api/v1/auth/token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     path("api/v1/auth/logout/", LogoutView.as_view(), name="logout"),
+    path("api/v1/auth/me/", MeView.as_view(), name="me"),
     path("api/v1/auth/password-reset/", PasswordResetRequestView.as_view(), name="password-reset"),
     path("api/v1/auth/password-reset/confirm/", PasswordResetConfirmView.as_view(), name="password-reset-confirm"),
     path("api/v1/auth/password/change/", PasswordChangeView.as_view(), name="password-change"),

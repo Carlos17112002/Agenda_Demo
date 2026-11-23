@@ -6,7 +6,13 @@ import { describe, expect, test, vi } from 'vitest';
 
 import { ApiError } from '../api/client';
 import type { CompanySummary } from '../api/types';
-import { createMemorySessionStore, makeBootstrap, makeCompany, makeGateway } from '../test/factories';
+import {
+  createMemorySessionStore,
+  makeBootstrap,
+  makeCompany,
+  makeGateway,
+  makeUser,
+} from '../test/factories';
 import { AuthProvider, useAuth } from './AuthProvider';
 import type { SessionStore } from './sessionStore';
 
@@ -142,6 +148,42 @@ describe('AuthProvider', () => {
     await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('ready'));
     expect(gateway.createContext).toHaveBeenCalledWith('company-a');
     expect(store.state.refresh).toBe('refresh-a');
+  });
+
+  test('el login de un superadmin abre el panel SaaS sin exigir empresa', async () => {
+    const store = createMemorySessionStore();
+    const gateway = makeGateway({
+      login: async () => ({
+        access: 'access-s',
+        refresh: 'refresh-s',
+        user: makeUser({ is_superuser: true }),
+      }),
+      companies: async () => [],
+    });
+    renderAuth(store, gateway);
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('anonymous'));
+
+    await userEvent.click(screen.getByRole('button', { name: 'entrar' }));
+
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('saasAdmin'));
+    expect(gateway.companies).not.toHaveBeenCalled();
+    expect(gateway.createContext).not.toHaveBeenCalled();
+    expect(store.state.refresh).toBe('refresh-s');
+  });
+
+  test('restaurar la sesión de un superadmin usa /me y no exige empresa', async () => {
+    const store = createMemorySessionStore({ refresh: 'refresh-admin' });
+    const gateway = makeGateway({
+      refresh: async () => ({ access: 'access-r' }),
+      me: async () => makeUser({ is_saas_admin: true }),
+      companies: async () => [],
+    });
+    renderAuth(store, gateway);
+
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('saasAdmin'));
+    expect(gateway.me).toHaveBeenCalled();
+    expect(gateway.companies).not.toHaveBeenCalled();
+    expect(store.state.refresh).toBe('refresh-admin');
   });
 
   test('refrescar el bootstrap actualiza también la lista de empresas', async () => {

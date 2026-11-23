@@ -42,6 +42,18 @@ class PasswordResetRateThrottle(AnonRateThrottle):
 class PasswordResetConfirmRateThrottle(AnonRateThrottle):
     scope = "password_reset_confirm"
 
+def user_payload(user):
+    return {
+        "id": str(user.id),
+        "email": user.email,
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+        "is_saas_admin": user.is_saas_admin,
+        "is_superuser": user.is_superuser,
+        "must_change_password": user.must_change_password,
+    }
+
+
 class LoginSerializer(TokenObtainPairSerializer):
     def validate(self, attrs):
         data = super().validate(attrs)
@@ -50,20 +62,20 @@ class LoginSerializer(TokenObtainPairSerializer):
             "login_succeeded user_id=%s email=%s ip=%s",
             self.user.pk, _masked_email(self.user.email), _client_ip(request),
         )
-        data["user"] = {
-            "id": str(self.user.id),
-            "email": self.user.email,
-            "first_name": self.user.first_name,
-            "last_name": self.user.last_name,
-            "is_saas_admin": self.user.is_saas_admin,
-            "must_change_password": self.user.must_change_password,
-        }
+        data["user"] = user_payload(self.user)
         return data
 
 
 class LoginView(TokenObtainPairView):
     serializer_class = LoginSerializer
     throttle_classes = [LoginRateThrottle]
+
+
+class MeView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return Response(user_payload(request.user), status=status.HTTP_200_OK)
 
 class LogoutSerializer(serializers.Serializer):
     refresh = serializers.CharField()

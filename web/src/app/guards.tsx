@@ -20,13 +20,23 @@ export function RequireAuthenticated({ children }: { children: ReactNode }) {
   if (status === 'anonymous') {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   }
+  if (status === 'saasAdmin') return <Navigate to="/saas" replace />;
   return <>{children}</>;
 }
 
 export function RequireReady({ children }: { children: ReactNode }) {
   const { status } = useAuth();
   if (status === 'choosingCompany') return <Navigate to="/empresa" replace />;
+  if (status === 'saasAdmin') return <Navigate to="/saas" replace />;
   if (status !== 'ready') return <FullPageLoading />;
+  return <>{children}</>;
+}
+
+export function RequireSaasAdmin({ children }: { children: ReactNode }) {
+  const { status } = useAuth();
+  if (status === 'loading') return <FullPageLoading />;
+  if (status === 'anonymous') return <Navigate to="/login" replace />;
+  if (status !== 'saasAdmin') return <Navigate to="/" replace />;
   return <>{children}</>;
 }
 

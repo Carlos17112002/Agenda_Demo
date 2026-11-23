@@ -26,5 +26,6 @@ class Command(BaseCommand):
             username=email,
             password=password,
             first_name=os.getenv("AGENDA_SUPERADMIN_FIRST_NAME", "").strip(),
+            is_saas_admin=True,
         )
         self.stdout.write(f"bootstrap_superadmin: superadmin {email} creado.")

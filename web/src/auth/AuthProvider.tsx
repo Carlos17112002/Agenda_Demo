@@ -23,11 +23,12 @@ import type {
 import { allows } from '../lib/permissions';
 import type { SessionStore } from './sessionStore';
 
-export type AuthStatus = 'loading' | 'anonymous' | 'choosingCompany' | 'ready';
+export type AuthStatus = 'loading' | 'anonymous' | 'choosingCompany' | 'saasAdmin' | 'ready';
 
 export type AuthGateway = {
   login(email: string, password: string): Promise<LoginResponse>;
   refresh(refresh: string): Promise<RefreshResponse>;
+  me(): Promise<User>;
   companies(): Promise<CompanySummary[]>;
   createContext(companyId: string): Promise<TenantContextResponse>;
   bootstrap(): Promise<Bootstrap>;
@@ -42,6 +43,7 @@ type Runtime = {
 
 export type AuthContextValue = {
   status: AuthStatus;
+  isSaasAdmin: boolean;
   user: User | null;
   companies: CompanySummary[];
   company: BootstrapCompany | null;
@@ -61,6 +63,10 @@ export const AuthContext = createContext<AuthContextValue | null>(null);
 
 function messageOf(error: unknown): string {
   return error instanceof ApiError ? error.message : 'Ocurrió un error inesperado.';
+}
+
+export function isSaasAdminUser(user: User | null): boolean {
+  return Boolean(user && (user.is_saas_admin || user.is_superuser));
 }
 
 type Props = {
@@ -131,6 +137,14 @@ export function AuthProvider({ children, gateway, store, runtime }: Props) {
         runtime.accessToken = tokens.access;
         if (tokens.refresh) store.writeRefresh(tokens.refresh);
 
+        const current = await gateway.me();
+        if (cancelled) return;
+        if (isSaasAdminUser(current)) {
+          setUser(current);
+          setStatus('saasAdmin');
+          return;
+        }
+
         const list = await gateway.companies();
         if (cancelled) return;
         setCompanies(list);
@@ -195,6 +209,12 @@ export function AuthProvider({ children, gateway, store, runtime }: Props) {
         runtime.accessToken = data.access;
         store.writeRefresh(data.refresh);
         setUser(data.user);
+        if (isSaasAdminUser(data.user)) {
+          runtime.tenantContextId = null;
+          store.writeSession(null);
+          setStatus('saasAdmin');
+          return;
+        }
         const list = await gateway.companies();
         setCompanies(list);
         if (list.length === 1) {
@@ -271,6 +291,7 @@ export function AuthProvider({ children, gateway, store, runtime }: Props) {
   const value = useMemo<AuthContextValue>(
     () => ({
       status,
+      isSaasAdmin: isSaasAdminUser(user),
       user,
       companies,
       company,

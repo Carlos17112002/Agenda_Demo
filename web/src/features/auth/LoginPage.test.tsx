@@ -15,6 +15,7 @@ function renderLogin(auth = makeAuthValue({ status: 'anonymous' })) {
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/agenda" element={<p>Agenda cargada</p>} />
+          <Route path="/saas" element={<p>Panel SaaS cargado</p>} />
         </Routes>
       </MemoryRouter>
     </AuthContext.Provider>,
@@ -47,5 +48,10 @@ describe('LoginPage', () => {
     const auth = makeAuthValue({ status: 'ready' });
     renderLogin(auth);
     expect(await screen.findByText('Agenda cargada')).toBeInTheDocument();
+  });
+
+  test('un superadmin siempre entra al panel SaaS', async () => {
+    renderLogin(makeAuthValue({ status: 'saasAdmin', isSaasAdmin: true }));
+    expect(await screen.findByText('Panel SaaS cargado')).toBeInTheDocument();
   });
 });
