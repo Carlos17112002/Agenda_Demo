@@ -19,7 +19,7 @@ const schema = z.object({
 type FormValues = z.infer<typeof schema>;
 
 export function LoginPage() {
-  const { status, login, can, hasFeature } = useAuth();
+  const { status, login, can, hasFeature, error: authError } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -58,7 +58,9 @@ export function LoginPage() {
         <p className="mt-1 text-sm text-muted">Accede con tu cuenta de la empresa.</p>
 
         <form className="mt-6 space-y-4" onSubmit={handleSubmit(onSubmit)} noValidate>
-          {submitError ? <ErrorBanner message={submitError} /> : null}
+          {submitError ?? authError ? (
+            <ErrorBanner message={submitError ?? authError ?? ''} />
+          ) : null}
           <Field label="Correo" htmlFor="login-email" error={errors.email?.message}>
             <Input
               id="login-email"

@@ -254,6 +254,20 @@ class SaasAdminApiTests(BillingScenarioMixin, TestCase):
         )
         self.assertEqual(response.status_code, 400)
 
+    def test_saas_admin_changes_company_plan(self):
+        company = make_company("saas-plan", "SaaS Plan")
+        subscription = start_subscription(company, self.plan, trial_days=7)
+        premium = make_plan("premium-saas-plan", name="Premium")
+        response = self.saas_client.post(
+            f"/api/v1/saas/subscriptions/{subscription.id}/change-plan/",
+            {"plan": str(premium.id)}, format="json",
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["plan"]["code"], "premium-saas-plan")
+        subscription.refresh_from_db()
+        self.assertEqual(subscription.plan_id, premium.id)
+        self.assertIsNotNone(subscription.trial_ends_at)
+
 
 class RegistrationAndLegacyTests(TestCase):
     @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")

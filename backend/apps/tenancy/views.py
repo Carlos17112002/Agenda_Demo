@@ -26,9 +26,10 @@ class MyCompaniesView(viewsets.ViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def list(self, request):
-        companies = [membership.company for membership in request.user.memberships.filter(
-            active=True, company__status__in=["trial", "active"]
-        ).select_related("company")]
+        memberships = request.user.memberships.filter(active=True).select_related("company")
+        if request.query_params.get("include") != "all":
+            memberships = memberships.filter(company__status__in=["trial", "active"])
+        companies = [membership.company for membership in memberships]
         return Response(CompanySerializer(
             companies, many=True, context={"request": request},
         ).data)

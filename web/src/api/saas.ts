@@ -18,5 +18,11 @@ export function createSaasApi(client: ApiClient) {
       client.post<SaasPlan>('/api/v1/saas/plans/', input),
     updatePlan: (id: string, input: SaasPlanInput) =>
       client.patch<SaasPlan>(`/api/v1/saas/plans/${id}/`, input),
+    changeStatus: (id: string, status: 'active' | 'suspended') =>
+      client.post<SaasCompany>(`/api/v1/saas/companies/${id}/change-status/`, { status }),
+    changePlan: (subscriptionId: string, planId: string) =>
+      client.post<unknown>(`/api/v1/saas/subscriptions/${subscriptionId}/change-plan/`, {
+        plan: planId,
+      }),
   };
 }

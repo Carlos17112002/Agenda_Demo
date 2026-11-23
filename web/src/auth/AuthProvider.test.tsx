@@ -22,6 +22,7 @@ function Probe() {
   return (
     <div>
       <span data-testid="status">{auth.status}</span>
+      <span data-testid="error">{auth.error ?? ''}</span>
       <span data-testid="company">{auth.company?.name ?? ''}</span>
       <span data-testid="companies">
         {auth.companies.map((item) => item.display_name || item.name).join(',')}
@@ -214,6 +215,67 @@ describe('AuthProvider', () => {
     expect(gateway.me).toHaveBeenCalled();
     expect(gateway.companies).not.toHaveBeenCalled();
     expect(store.state.refresh).toBe('refresh-admin');
+  });
+
+  test('restaurar la sesión ignora la empresa suspendida guardada y usa la activa', async () => {
+    const store = createMemorySessionStore({
+      refresh: 'refresh-old',
+      session: { companyId: 'company-s', contextId: 'ctx-s', companyName: 'Marca Suspendida' },
+    });
+    const gateway = makeGateway({
+      companies: async () => [
+        makeCompany({ id: 'company-s', name: 'Marca Suspendida', status: 'suspended' }),
+        makeCompany({ id: 'company-a' }),
+      ],
+    });
+    renderAuth(store, gateway);
+
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('ready'));
+
+    expect(gateway.createContext).toHaveBeenCalledWith('company-a');
+    expect(store.state.session?.companyId).toBe('company-a');
+  });
+
+  test('el login con solo empresas suspendidas explica la suspensión', async () => {
+    const store = createMemorySessionStore();
+    const gateway = makeGateway({
+      companies: async () => [makeCompany({ id: 'company-s', status: 'suspended' })],
+    });
+    renderAuth(store, gateway);
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('anonymous'));
+
+    await userEvent.click(screen.getByRole('button', { name: 'entrar' }));
+
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('anonymous'));
+    expect(screen.getByTestId('error')).toHaveTextContent(
+      'Tu empresa está suspendida. Contacta al administrador.',
+    );
+    expect(gateway.createContext).not.toHaveBeenCalled();
+    expect(store.state.refresh).toBeNull();
+  });
+
+  test('la selección de empresa no ofrece empresas suspendidas', async () => {
+    const store = createMemorySessionStore();
+    const gateway = makeGateway({
+      companies: async () => [
+        makeCompany({ id: 'company-a' }),
+        makeCompany({
+          id: 'company-s',
+          name: 'Marca Suspendida',
+          display_name: 'Marca Suspendida',
+          status: 'suspended',
+        }),
+        makeCompany({ id: 'company-b', name: 'Marca B', display_name: 'Marca B' }),
+      ],
+    });
+    renderAuth(store, gateway);
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('anonymous'));
+
+    await userEvent.click(screen.getByRole('button', { name: 'entrar' }));
+
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('choosingCompany'));
+    expect(screen.getByTestId('companies')).toHaveTextContent('Estudio Aurora,Marca B');
+    expect(screen.getByTestId('companies')).not.toHaveTextContent('Marca Suspendida');
   });
 
   test('refrescar el bootstrap actualiza también la lista de empresas', async () => {

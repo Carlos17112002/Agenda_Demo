@@ -44,6 +44,19 @@ describe('LoginPage', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Credenciales inválidas.');
   });
 
+  test('muestra el aviso de empresa suspendida', async () => {
+    renderLogin(
+      makeAuthValue({
+        status: 'anonymous',
+        error: 'Tu empresa está suspendida. Contacta al administrador.',
+      }),
+    );
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Tu empresa está suspendida. Contacta al administrador.',
+    );
+  });
+
   test('con sesión lista redirige a la primera sección permitida', async () => {
     const auth = makeAuthValue({ status: 'ready' });
     renderLogin(auth);

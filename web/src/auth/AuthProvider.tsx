@@ -66,6 +66,12 @@ function messageOf(error: unknown): string {
   return error instanceof ApiError ? error.message : 'Ocurrió un error inesperado.';
 }
 
+const SUSPENDED_MESSAGE = 'Tu empresa está suspendida. Contacta al administrador.';
+
+function isAccessible(company: CompanySummary): boolean {
+  return company.status === 'trial' || company.status === 'active';
+}
+
 export function isSaasAdminUser(user: User | null): boolean {
   return Boolean(user && (user.is_saas_admin || user.is_superuser));
 }
@@ -161,8 +167,9 @@ export function AuthProvider({ children, gateway, store, runtime }: Props) {
           return;
         }
 
-        const list = await gateway.companies();
+        const all = await gateway.companies();
         if (cancelled) return;
+        const list = all.filter(isAccessible);
         setCompanies(list);
 
         const stored = store.readSession();
@@ -195,7 +202,7 @@ export function AuthProvider({ children, gateway, store, runtime }: Props) {
         if (list.length === 0) {
           clearLocalSession();
           setStatus('anonymous');
-          setError('La cuenta no tiene empresas activas.');
+          setError(all.length > 0 ? SUSPENDED_MESSAGE : 'La cuenta no tiene empresas activas.');
           return;
         }
         runtime.tenantContextId = null;
@@ -231,14 +238,15 @@ export function AuthProvider({ children, gateway, store, runtime }: Props) {
           setStatus('saasAdmin');
           return;
         }
-        const list = await gateway.companies();
+        const all = await gateway.companies();
+        const list = all.filter(isAccessible);
         setCompanies(list);
         if (list.length === 1) {
           await activateCompany(list[0]);
         } else if (list.length === 0) {
           clearLocalSession();
           setStatus('anonymous');
-          setError('La cuenta no tiene empresas activas.');
+          setError(all.length > 0 ? SUSPENDED_MESSAGE : 'La cuenta no tiene empresas activas.');
         } else {
           runtime.tenantContextId = null;
           store.writeSession(null);
@@ -282,7 +290,7 @@ export function AuthProvider({ children, gateway, store, runtime }: Props) {
   const refreshBootstrap = useCallback(async () => {
     const [data, list] = await Promise.all([gateway.bootstrap(), gateway.companies()]);
     applyBootstrap(data);
-    setCompanies(list);
+    setCompanies(list.filter(isAccessible));
   }, [applyBootstrap, gateway]);
 
   const changePassword = useCallback(

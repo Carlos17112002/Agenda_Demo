@@ -1,19 +1,35 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
 import { saasApi } from '../../api/runtime';
 import type { SaasCompany, SaasCompanyCreateResult } from '../../api/types';
-import { Badge } from '../../components/ui/Badge';
+import { Badge, type BadgeTone } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { ErrorBanner } from '../../components/ui/ErrorBanner';
 import { PageHeader } from '../../components/ui/PageHeader';
 import { SaasCompanyCreatedDialog } from './SaasCompanyCreatedDialog';
 import { SaasCompanyFormDialog } from './SaasCompanyFormDialog';
+import { SaasEditCompanyDialog } from './SaasEditCompanyDialog';
+
+const STATUS_LABEL: Record<string, string> = {
+  trial: 'Prueba',
+  active: 'Activa',
+  suspended: 'Suspendida',
+  closed: 'Cerrada',
+};
+
+function statusTone(status: string): BadgeTone {
+  if (status === 'active') return 'active';
+  if (status === 'trial') return 'scheduled';
+  return 'inactive';
+}
 
 export function SaasCompaniesPage() {
+  const queryClient = useQueryClient();
   const [formOpen, setFormOpen] = useState(false);
   const [created, setCreated] = useState<SaasCompanyCreateResult | null>(null);
+  const [editing, setEditing] = useState<SaasCompany | null>(null);
 
   const companiesQuery = useQuery({
     queryKey: ['saas-companies'],
@@ -65,6 +81,7 @@ export function SaasCompaniesPage() {
                 <th className="px-4 py-3">Plan</th>
                 <th className="px-4 py-3">Estado</th>
                 <th className="px-4 py-3">Fin del período</th>
+                <th className="px-4 py-3">Acciones</th>
               </tr>
             </thead>
             <tbody>
@@ -78,12 +95,17 @@ export function SaasCompaniesPage() {
                     {company.subscription ? planName(company.subscription.plan) : '—'}
                   </td>
                   <td className="px-4 py-3">
-                    <Badge tone={company.subscription?.usable ? 'active' : 'inactive'}>
-                      {company.subscription?.usable ? 'Activa' : 'Inactiva'}
+                    <Badge tone={statusTone(company.status)}>
+                      {STATUS_LABEL[company.status] ?? company.status}
                     </Badge>
                   </td>
                   <td className="px-4 py-3">
                     {company.subscription?.current_period_end?.slice(0, 10) ?? '—'}
+                  </td>
+                  <td className="px-4 py-3">
+                    <Button variant="secondary" onClick={() => setEditing(company)}>
+                      Editar
+                    </Button>
                   </td>
                 </tr>
               ))}
@@ -104,6 +126,18 @@ export function SaasCompaniesPage() {
         result={created}
         onOpenChange={(next) => {
           if (!next) setCreated(null);
+        }}
+      />
+
+      <SaasEditCompanyDialog
+        open={Boolean(editing)}
+        company={editing}
+        plans={plans}
+        onOpenChange={(next) => {
+          if (!next) setEditing(null);
+        }}
+        onSaved={() => {
+          void queryClient.invalidateQueries({ queryKey: ['saas-companies'] });
         }}
       />
     </section>
