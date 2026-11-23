@@ -168,4 +168,4 @@ Cuando ambos servicios estén vivos:
 - Panel: `https://agenda-demo-panel.onrender.com`
 - Admin Django: `https://agenda-demo-api.onrender.com/admin/`
 
-El plan gratuito duerme la API tras 15 minutos sin tráfico (el primer acceso tarda ~1 minuto) y la base PostgreSQL gratuita expira; los archivos subidos a `MEDIA_ROOT` se pierden en cada redeploy. Los comandos `bootstrap_superadmin` (crea el superadmin desde las variables, sin sobrescribir) y `bootstrap_demo` no se ejecutan solos salvo el primero, incluido en el arranque.
+El plan gratuito duerme la API tras 15 minutos sin tráfico (el primer acceso tarda ~1 minuto) y la base PostgreSQL gratuita expira; los archivos subidos a `MEDIA_ROOT` se pierden en cada redeploy. El arranque ejecuta `bootstrap_superadmin`: crea el superadmin desde las variables solo si no existe.
