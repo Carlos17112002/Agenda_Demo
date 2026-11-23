@@ -12,7 +12,9 @@ from apps.identity.models import PermissionGrant
 from .api import TenantModelViewSet
 from .branding import branding_payload
 from .models import Branch, TenantContext
-from .permissions import HasTenantContext, has_tenant_permission
+from .permissions import (
+    HasTenantContext, HasTenantPermission, IsTenantOwner, has_tenant_permission,
+)
 from .serializers import (
     BranchSerializer, CompanyBrandingSerializer, CompanyLogoSerializer,
     CompanyRegistrationSerializer, CompanySerializer, PermissionGrantSerializer,
@@ -160,6 +162,10 @@ class TenantContextViewSet(viewsets.GenericViewSet):
 
 class BranchViewSet(TenantModelViewSet):
     serializer_class = BranchSerializer
+    # Solo el propietario crea o modifica sucursales; lectura para cualquier rol con branches.read.
+    permission_classes = [
+        permissions.IsAuthenticated, HasTenantContext, HasTenantPermission, IsTenantOwner,
+    ]
     audit_name = "branch"
     soft_delete = True
     plan_limit_feature = "branches"

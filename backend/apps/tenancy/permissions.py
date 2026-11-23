@@ -1,5 +1,5 @@
 from django.db.models import Q
-from rest_framework.permissions import BasePermission
+from rest_framework.permissions import SAFE_METHODS, BasePermission
 
 ROLE_DEFAULTS = {
     "owner": {"*"},
@@ -94,6 +94,21 @@ class HasTenantContext(BasePermission):
 
     def has_permission(self, request, view):
         return bool(request.user and request.user.is_authenticated and _resolve_tenant(request))
+
+
+class IsTenantOwner(BasePermission):
+    """Write access reserved to the company owner, regardless of granted permissions."""
+
+    message = "Solo el propietario de la empresa puede realizar esta acción."
+
+    def has_permission(self, request, view):
+        if request.method in SAFE_METHODS:
+            return True
+        tenant = _resolve_tenant(request)
+        if not tenant or not request.user.is_authenticated:
+            return False
+        membership = request.user.memberships.filter(company=tenant, active=True).first()
+        return bool(membership and membership.role == "owner")
 
 
 class HasTenantPermission(BasePermission):

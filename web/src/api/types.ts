@@ -107,6 +107,12 @@ export type SaasCompany = {
   subscription: SaasSubscription | null;
 };
 
+export type SaasPlanFeature = {
+  code: string;
+  enabled: boolean;
+  limit_value: number | null;
+};
+
 export type SaasPlan = {
   id: UUID;
   code: string;
@@ -117,6 +123,28 @@ export type SaasPlan = {
   billing_period: 'monthly' | 'yearly';
   trial_days: number;
   active: boolean;
+  is_default: boolean;
+  sort_order: number;
+  features: SaasPlanFeature[];
+};
+
+export type SaasPlanFeatureInput = {
+  code: string;
+  enabled: boolean;
+  limit_value?: number | null;
+};
+
+export type SaasPlanInput = {
+  code: string;
+  name: string;
+  description: string;
+  price: string;
+  currency: string;
+  billing_period: 'monthly' | 'yearly';
+  trial_days: number;
+  active: boolean;
+  is_default: boolean;
+  features: SaasPlanFeatureInput[];
 };
 
 export type SaasCompanyCreateInput = {

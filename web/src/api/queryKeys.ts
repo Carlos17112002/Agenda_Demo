@@ -28,6 +28,7 @@ export const queryKeys = {
     list('sales-summary', companyId, params),
   cashSummary: (companyId: UUID, params: SummaryParams) => list('cash-summary', companyId, params),
   branding: (companyId: UUID) => ['branding', companyId] as const,
+  branches: (companyId: UUID) => ['branches', companyId] as const,
   inventoryProducts: (companyId: UUID, params: AssetListParams) =>
     list('inventory-products', companyId, params),
   inventoryDocuments: (companyId: UUID, params: DocumentListParams) =>

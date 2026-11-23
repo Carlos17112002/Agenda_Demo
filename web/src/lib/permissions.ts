@@ -16,6 +16,7 @@ export type NavItem = {
   label: string;
   permission: string;
   feature?: string;
+  ownerOnly?: boolean;
 };
 
 export const NAV_ITEMS: NavItem[] = [
@@ -24,17 +25,26 @@ export const NAV_ITEMS: NavItem[] = [
   { path: '/servicios', label: 'Servicios', permission: 'catalog.read', feature: 'catalog' },
   { path: '/equipo', label: 'Equipo', permission: 'workforce.read', feature: 'workforce' },
   { path: '/inventario', label: 'Inventario', permission: 'inventory.read', feature: 'inventory' },
+  { path: '/sucursales', label: 'Sucursales', permission: 'branches.read', feature: 'branches', ownerOnly: true },
   { path: '/resumen', label: 'Resumen', permission: 'reports.read', feature: 'reports' },
   { path: '/usuarios', label: 'Usuarios', permission: 'company.manage' },
   { path: '/marca', label: 'Marca', permission: 'company.manage' },
 ];
 
-export function visibleNav(can: CanFn, hasFeature: FeatureFn, items: NavItem[] = NAV_ITEMS): NavItem[] {
+export function visibleNav(
+  can: CanFn,
+  hasFeature: FeatureFn,
+  items: NavItem[] = NAV_ITEMS,
+  isOwner = false,
+): NavItem[] {
   return items.filter(
-    (item) => can(item.permission) && (item.feature === undefined || hasFeature(item.feature)),
+    (item) =>
+      (!item.ownerOnly || isOwner) &&
+      can(item.permission) &&
+      (item.feature === undefined || hasFeature(item.feature)),
   );
 }
 
-export function firstAllowedPath(can: CanFn, hasFeature: FeatureFn): string {
-  return visibleNav(can, hasFeature)[0]?.path ?? '/sin-acceso';
+export function firstAllowedPath(can: CanFn, hasFeature: FeatureFn, isOwner = false): string {
+  return visibleNav(can, hasFeature, NAV_ITEMS, isOwner)[0]?.path ?? '/sin-acceso';
 }

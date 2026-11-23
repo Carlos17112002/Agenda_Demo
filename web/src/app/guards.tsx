@@ -59,6 +59,13 @@ export function RequirePermission({
   return <>{children}</>;
 }
 
+export function RequireOwner({ children }: { children: ReactNode }) {
+  const { status, bootstrap } = useAuth();
+  if (status === 'loading') return <FullPageLoading />;
+  if (bootstrap?.membership.role !== 'owner') return <Navigate to="/sin-acceso" replace />;
+  return <>{children}</>;
+}
+
 export function AccessDeniedPage() {
   const { can, hasFeature } = useAuth();
   const target = firstAllowedPath(can, hasFeature);

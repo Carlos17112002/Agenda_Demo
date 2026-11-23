@@ -265,6 +265,20 @@ class BranchSerializer(TenantOwnedSerializer):
                   "created_at", "updated_at"]
         read_only_fields = ["id", "created_at", "updated_at"]
 
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        tenant = getattr(self.context.get("request"), "tenant", None)
+        code = attrs.get("code", getattr(self.instance, "code", None))
+        if tenant and code:
+            duplicates = Branch.objects.filter(company=tenant, code=code)
+            if self.instance:
+                duplicates = duplicates.exclude(pk=self.instance.pk)
+            if duplicates.exists():
+                raise serializers.ValidationError(
+                    {"code": "Ya existe una sucursal con ese código en la empresa."}
+                )
+        return attrs
+
 class PermissionGrantSerializer(serializers.ModelSerializer):
     class Meta:
         model = PermissionGrant

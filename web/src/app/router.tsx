@@ -5,6 +5,7 @@ import { LoginPage } from '../features/auth/LoginPage';
 import { ChangePasswordPage } from '../features/auth/ChangePasswordPage';
 import { AgendaPage } from '../features/agenda/AgendaPage';
 import { BrandingPage } from '../features/branding/BrandingPage';
+import { SucursalesPage } from '../features/branches/SucursalesPage';
 import { CustomersPage } from '../features/customers/CustomersPage';
 import { InventoryPage } from '../features/inventory/InventoryPage';
 import { MembersPage } from '../features/members/MembersPage';
@@ -14,11 +15,13 @@ import { TeamPage } from '../features/team/TeamPage';
 import { AppLayout } from './AppLayout';
 import { SaasAdminLayout } from '../features/saas/SaasAdminLayout';
 import { SaasCompaniesPage } from '../features/saas/SaasCompaniesPage';
+import { SaasPlansPage } from '../features/saas/SaasPlansPage';
 import {
   AccessDeniedPage,
   ForcePasswordChange,
   NotFoundPage,
   RequireAuthenticated,
+  RequireOwner,
   RequirePermission,
   RequireReady,
   RequireSaasAdmin,
@@ -42,7 +45,10 @@ export const routeObjects: RouteObject[] = [
         <SaasAdminLayout />
       </RequireSaasAdmin>
     ),
-    children: [{ index: true, element: <SaasCompaniesPage /> }],
+    children: [
+      { index: true, element: <SaasCompaniesPage /> },
+      { path: 'planes', element: <SaasPlansPage /> },
+    ],
   },
   {
     path: '/cambiar-clave',
@@ -105,6 +111,16 @@ export const routeObjects: RouteObject[] = [
           <RequirePermission permission="inventory.read">
             <InventoryPage />
           </RequirePermission>
+        ),
+      },
+      {
+        path: 'sucursales',
+        element: (
+          <RequireOwner>
+            <RequirePermission permission="branches.read">
+              <SucursalesPage />
+            </RequirePermission>
+          </RequireOwner>
         ),
       },
       {

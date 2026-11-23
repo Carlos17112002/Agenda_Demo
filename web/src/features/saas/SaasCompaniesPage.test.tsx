@@ -40,6 +40,9 @@ const planFixture: SaasPlan = {
   billing_period: 'monthly',
   trial_days: 14,
   active: true,
+  is_default: false,
+  sort_order: 0,
+  features: [],
 };
 
 function renderPage() {

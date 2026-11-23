@@ -1,6 +1,7 @@
 import { localSessionStore } from '../auth/sessionStore';
 import { createAgendaApi } from './agenda';
 import { createAuthGateway } from './auth';
+import { createBranchesApi } from './branches';
 import { createBrandingApi } from './branding';
 import { ApiClient, ApiError } from './client';
 import { createCustomersApi } from './customers';
@@ -46,6 +47,7 @@ export const servicesApi = createServicesApi(apiClient);
 export const teamApi = createTeamApi(apiClient);
 export const summaryApi = createSummaryApi(apiClient);
 export const brandingApi = createBrandingApi(apiClient);
+export const branchesApi = createBranchesApi(apiClient);
 export const inventoryApi = createInventoryApi(apiClient);
 export const membersApi = createMembersApi(apiClient);
 export const saasApi = createSaasApi(apiClient);

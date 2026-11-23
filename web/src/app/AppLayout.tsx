@@ -6,7 +6,7 @@ import { ApiError } from '../api/client';
 import { useAuth } from '../auth/AuthProvider';
 import { Button } from '../components/ui/Button';
 import { ErrorBanner } from '../components/ui/ErrorBanner';
-import { visibleNav } from '../lib/permissions';
+import { NAV_ITEMS, visibleNav } from '../lib/permissions';
 import { useOnlineStatus } from '../lib/useOnlineStatus';
 import { useTheme } from '../theme/ThemeProvider';
 
@@ -34,7 +34,7 @@ export function AppLayout() {
   const [refreshing, setRefreshing] = useState(false);
   const [switching, setSwitching] = useState(false);
   const [layoutError, setLayoutError] = useState<string | null>(null);
-  const nav = visibleNav(can, hasFeature);
+  const nav = visibleNav(can, hasFeature, NAV_ITEMS, bootstrap?.membership.role === 'owner');
 
   async function reload() {
     setRefreshing(true);
