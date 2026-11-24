@@ -6,6 +6,16 @@ export type ReportRange = {
   date_to: ISODate | null;
   timezone: string;
   branch: UUID | null;
+  worker: UUID | null;
+};
+
+export type BookingCounts = {
+  total: number;
+  scheduled: number;
+  confirmed: number;
+  completed: number;
+  canceled: number;
+  no_show: number;
 };
 
 export type SalesTotals = {
@@ -18,6 +28,7 @@ export type SalesTotals = {
   profit: string;
   margin_percent: string;
   average_ticket: string;
+  bookings: BookingCounts;
 };
 
 export type PaymentMethodTotal = {
@@ -58,12 +69,22 @@ export type TopItem = {
   profit: string;
 };
 
+export type WorkerTotal = {
+  worker: UUID | null;
+  worker_name: string;
+  bookings: BookingCounts;
+  sales: number;
+  total: string;
+  profit: string;
+};
+
 export type SalesSummary = {
   range: ReportRange;
   totals: SalesTotals;
   by_payment_method: PaymentMethodTotal[];
   by_day: SalesDay[];
   by_branch: BranchTotal[];
+  by_worker: WorkerTotal[];
   top_products: TopItem[];
   top_services: TopItem[];
 };
@@ -108,7 +129,15 @@ export type CashSummary = {
   expenses_by_method: ExpenseMethodTotal[];
 };
 
-export type SummaryParams = { date_from: ISODate; date_to: ISODate; branch?: UUID };
+export type SummaryParams = {
+  date_from: ISODate;
+  date_to: ISODate;
+  branch?: UUID;
+  worker?: UUID;
+};
+
+export type ExportFormat = 'pdf' | 'excel';
+export type ExportParams = SummaryParams & { fmt: ExportFormat };
 
 export function createSummaryApi(client: ApiClient) {
   return {
@@ -116,6 +145,8 @@ export function createSummaryApi(client: ApiClient) {
       client.get<SalesSummary>('/api/v1/reports/sales-summary/', { ...params }),
     cash: (params: SummaryParams) =>
       client.get<CashSummary>('/api/v1/reports/cash-summary/', { ...params }),
+    export: (params: ExportParams) =>
+      client.download('/api/v1/reports/export/', { ...params }),
   };
 }
 

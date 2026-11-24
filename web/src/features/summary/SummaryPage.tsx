@@ -2,16 +2,17 @@ import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 
 import { queryKeys } from '../../api/queryKeys';
-import { summaryApi } from '../../api/runtime';
-import type { SummaryParams } from '../../api/summary';
+import { summaryApi, teamApi } from '../../api/runtime';
+import type { ExportFormat, SummaryParams } from '../../api/summary';
 import { useAuth } from '../../auth/AuthProvider';
 import { Badge } from '../../components/ui/Badge';
+import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { ErrorBanner } from '../../components/ui/ErrorBanner';
 import { Field, Input, Select } from '../../components/ui/Field';
 import { PageHeader } from '../../components/ui/PageHeader';
 import { Skeleton } from '../../components/ui/Skeleton';
-import { formatDateLabel, shiftDate, todayInZone } from '../../lib/dates';
+import { formatDateLabel, shiftDate, todayInZone, weekRange } from '../../lib/dates';
 import { formatMoney, formatPercent } from '../../lib/format';
 
 function Metric({ label, value }: { label: string; value: string }) {
@@ -27,6 +28,9 @@ export function SummaryPage() {
   const { company, bootstrap } = useAuth();
   const branches = (bootstrap?.branches ?? []).filter((branch) => branch.active);
   const [branchId, setBranchId] = useState('');
+  const [workerId, setWorkerId] = useState('');
+  const [exporting, setExporting] = useState<ExportFormat | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
   const timezone =
     branches.find((branch) => branch.id === branchId)?.timezone
     ?? branches[0]?.timezone
@@ -35,11 +39,23 @@ export function SummaryPage() {
   const [dateFrom, setDateFrom] = useState(() => shiftDate(todayInZone(timezone), -6));
 
   const rangeValid = Boolean(dateFrom && dateTo && dateFrom <= dateTo);
-  const params: SummaryParams = {
+  const baseParams: SummaryParams = {
     date_from: dateFrom,
     date_to: dateTo,
     branch: branchId || undefined,
   };
+  const params: SummaryParams = { ...baseParams, worker: workerId || undefined };
+
+  const workersQuery = useQuery({
+    queryKey: queryKeys.workers(company?.id ?? '', {
+      active: true,
+      branch: branchId || undefined,
+    }),
+    queryFn: () =>
+      teamApi.workers.list({ active: true, branch: branchId || undefined }),
+    enabled: Boolean(company),
+  });
+  const workers = workersQuery.data?.results ?? [];
 
   const salesQuery = useQuery({
     queryKey: queryKeys.salesSummary(company?.id ?? '', params),
@@ -47,22 +63,100 @@ export function SummaryPage() {
     enabled: Boolean(company) && rangeValid,
   });
   const cashQuery = useQuery({
-    queryKey: queryKeys.cashSummary(company?.id ?? '', params),
-    queryFn: () => summaryApi.cash(params),
+    queryKey: queryKeys.cashSummary(company?.id ?? '', baseParams),
+    queryFn: () => summaryApi.cash(baseParams),
     enabled: Boolean(company) && rangeValid,
   });
 
   const sales = salesQuery.data;
   const cash = cashQuery.data;
 
+  function applyPeriod(kind: 'week' | 'month' | 'year') {
+    const today = todayInZone(timezone);
+    if (kind === 'week') {
+      const range = weekRange(today);
+      setDateFrom(range.date_from);
+      setDateTo(range.date_to);
+      return;
+    }
+    if (kind === 'month') {
+      const [year, month] = today.split('-').map(Number);
+      const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+      setDateFrom(`${today.slice(0, 7)}-01`);
+      setDateTo(`${today.slice(0, 7)}-${String(lastDay).padStart(2, '0')}`);
+      return;
+    }
+    setDateFrom(`${today.slice(0, 4)}-01-01`);
+    setDateTo(`${today.slice(0, 4)}-12-31`);
+  }
+
+  async function downloadReport(fmt: ExportFormat) {
+    setExporting(fmt);
+    setExportError(null);
+    try {
+      const result = await summaryApi.export({ ...params, fmt });
+      const objectUrl = URL.createObjectURL(result.blob);
+      const anchor = document.createElement('a');
+      anchor.href = objectUrl;
+      anchor.download = result.filename ?? `informe.${fmt === 'pdf' ? 'pdf' : 'xlsx'}`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+    } catch (error) {
+      setExportError(
+        error instanceof Error ? error.message : 'No se pudo exportar el informe.',
+      );
+    } finally {
+      setExporting(null);
+    }
+  }
+
   return (
     <section>
       <PageHeader
         title="Resumen"
-        description="Ventas y caja de la empresa para el rango y la sucursal seleccionados."
+        description="Ventas y caja de la empresa para el rango, la sucursal y el trabajador seleccionados."
+        actions={
+          <>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => void downloadReport('pdf')}
+              loading={exporting === 'pdf'}
+              loadingLabel="Generando…"
+              disabled={!rangeValid}
+            >
+              Exportar PDF
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => void downloadReport('excel')}
+              loading={exporting === 'excel'}
+              loadingLabel="Generando…"
+              disabled={!rangeValid}
+            >
+              Exportar Excel
+            </Button>
+          </>
+        }
       />
 
-      <div className="mb-6 grid gap-3 sm:grid-cols-3">
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <span className="text-sm text-muted">Accesos rápidos:</span>
+        <Button type="button" variant="secondary" onClick={() => applyPeriod('week')}>
+          Esta semana
+        </Button>
+        <Button type="button" variant="secondary" onClick={() => applyPeriod('month')}>
+          Este mes
+        </Button>
+        <Button type="button" variant="secondary" onClick={() => applyPeriod('year')}>
+          Este año
+        </Button>
+      </div>
+
+      <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Field label="Desde" htmlFor="summary-from">
           <Input
             id="summary-from"
@@ -95,11 +189,26 @@ export function SummaryPage() {
             ))}
           </Select>
         </Field>
+        <Field label="Trabajador" htmlFor="summary-worker">
+          <Select
+            id="summary-worker"
+            value={workerId}
+            onChange={(event) => setWorkerId(event.target.value)}
+          >
+            <option value="">Todos los trabajadores</option>
+            {workers.map((worker) => (
+              <option key={worker.id} value={worker.id}>
+                {worker.display_name || `${worker.first_name} ${worker.last_name}`.trim()}
+              </option>
+            ))}
+          </Select>
+        </Field>
       </div>
 
       {!rangeValid ? (
         <ErrorBanner message="La fecha desde no puede ser posterior a la fecha hasta." />
       ) : null}
+      {exportError ? <ErrorBanner message={exportError} /> : null}
 
       <section aria-labelledby="summary-sales-heading" className="mb-8">
         <h2 id="summary-sales-heading" className="mb-3 text-lg font-semibold text-ink">
@@ -123,6 +232,14 @@ export function SummaryPage() {
               <Metric label="Margen" value={formatPercent(sales.totals.margin_percent)} />
               <Metric label="Ticket promedio" value={formatMoney(sales.totals.average_ticket)} />
               <Metric label="Reservas" value={String(sales.totals.sales)} />
+            </div>
+
+            <h3 className="mb-3 mt-5 text-sm font-semibold text-ink">Citas</h3>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <Metric label="Citas agendadas" value={String(sales.totals.bookings.total)} />
+              <Metric label="Citas completadas" value={String(sales.totals.bookings.completed)} />
+              <Metric label="Citas canceladas" value={String(sales.totals.bookings.canceled)} />
+              <Metric label="Citas no asistió" value={String(sales.totals.bookings.no_show)} />
             </div>
 
             <div className="mt-5 grid gap-5 lg:grid-cols-2">
@@ -287,6 +404,66 @@ export function SummaryPage() {
                   </table>
                 )}
               </div>
+            </div>
+
+            <div className="mt-5 overflow-x-auto rounded-lg border border-line bg-panel">
+              <h3 className="border-b border-line px-4 py-3 text-sm font-semibold text-ink">
+                Por trabajador
+              </h3>
+              {sales.by_worker.length === 0 ? (
+                <p className="px-4 py-6 text-sm text-muted">
+                  Sin actividad por trabajador en el rango.
+                </p>
+              ) : (
+                <table className="w-full text-left text-sm">
+                  <thead className="text-xs uppercase tracking-wide text-muted">
+                    <tr>
+                      <th scope="col" className="px-4 py-2">
+                        Trabajador
+                      </th>
+                      <th scope="col" className="px-4 py-2">
+                        Citas
+                      </th>
+                      <th scope="col" className="px-4 py-2">
+                        Completadas
+                      </th>
+                      <th scope="col" className="px-4 py-2">
+                        Canceladas
+                      </th>
+                      <th scope="col" className="px-4 py-2">
+                        No asistió
+                      </th>
+                      <th scope="col" className="px-4 py-2">
+                        Ventas
+                      </th>
+                      <th scope="col" className="px-4 py-2 text-right">
+                        Total vendido
+                      </th>
+                      <th scope="col" className="px-4 py-2 text-right">
+                        Ganancia
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-line">
+                    {sales.by_worker.map((row) => (
+                      <tr key={row.worker ?? 'sin-trabajador'}>
+                        <td className="px-4 py-2 text-ink">{row.worker_name}</td>
+                        <td className="px-4 py-2 text-muted">{row.bookings.total}</td>
+                        <td className="px-4 py-2 text-muted">{row.bookings.completed}</td>
+                        <td className="px-4 py-2 text-muted">{row.bookings.canceled}</td>
+                        <td className="px-4 py-2 text-muted">{row.bookings.no_show}</td>
+                        <td className="px-4 py-2 text-muted">{row.sales}</td>
+                        <td className="px-4 py-2 text-right text-muted">
+                          {formatMoney(row.total)}
+                        </td>
+                        <td className="px-4 py-2 text-right text-muted">
+                          {formatMoney(row.profit)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
 
             <div className="mt-5 rounded-lg border border-line bg-panel">

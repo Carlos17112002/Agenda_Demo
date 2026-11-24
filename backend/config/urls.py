@@ -30,7 +30,7 @@ from apps.inventory.views import (
     PurchaseOrderViewSet, StockBalanceViewSet, StocktakeViewSet, SupplierViewSet,
     TransferViewSet, WarehouseViewSet,
 )
-from apps.reports.views import CashSummaryView, SalesSummaryView
+from apps.reports.views import CashSummaryView, ReportExportView, SalesSummaryView
 from apps.mobile.views import (
     MobileBootstrapView, MobileDeviceDetailView, MobileDeviceView,
     MobileNotificationReadAllView, MobileNotificationReadView,
@@ -117,6 +117,7 @@ urlpatterns = [
     path("api/v1/inventory/", include(inventory_router.urls)),
     path("api/v1/reports/sales-summary/", SalesSummaryView.as_view(), name="sales-summary"),
     path("api/v1/reports/cash-summary/", CashSummaryView.as_view(), name="cash-summary"),
+    path("api/v1/reports/export/", ReportExportView.as_view(), name="reports-export"),
     path("api/v1/saas/summary/", SaasSummaryView.as_view(), name="saas-summary"),
     path("api/v1/saas/", include(saas_router.urls)),
     path("api/v1/mobile/bootstrap/", MobileBootstrapView.as_view(), name="mobile-bootstrap"),

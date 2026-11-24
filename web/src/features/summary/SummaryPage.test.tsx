@@ -2,10 +2,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { describe, expect, test } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 import type { CashSummary, SalesSummary } from '../../api/summary';
 import { AuthContext } from '../../auth/AuthProvider';
+import { todayInZone } from '../../lib/dates';
 import { makeAuthValue } from '../../test/factories';
 import { server } from '../../test/server';
 import { SummaryPage } from './SummaryPage';
@@ -16,6 +17,7 @@ const salesSummary: SalesSummary = {
     date_to: '2026-11-11',
     timezone: 'America/Santiago',
     branch: null,
+    worker: null,
   },
   totals: {
     sales: 2,
@@ -27,7 +29,47 @@ const salesSummary: SalesSummary = {
     profit: '60000',
     margin_percent: '60.00',
     average_ticket: '50000',
+    bookings: {
+      total: 5,
+      scheduled: 0,
+      confirmed: 1,
+      completed: 2,
+      canceled: 1,
+      no_show: 1,
+    },
   },
+  by_worker: [
+    {
+      worker: 'worker-1',
+      worker_name: 'Ana Soto',
+      bookings: {
+        total: 3,
+        scheduled: 0,
+        confirmed: 1,
+        completed: 1,
+        canceled: 1,
+        no_show: 0,
+      },
+      sales: 1,
+      total: '60000',
+      profit: '36000',
+    },
+    {
+      worker: null,
+      worker_name: 'Sin trabajador',
+      bookings: {
+        total: 0,
+        scheduled: 0,
+        confirmed: 0,
+        completed: 0,
+        canceled: 0,
+        no_show: 0,
+      },
+      sales: 1,
+      total: '40000',
+      profit: '24000',
+    },
+  ],
   by_payment_method: [
     { method: 'cash', method_display: 'Efectivo', count: 1, amount: '60000' },
   ],
@@ -83,6 +125,7 @@ const cashSummary: CashSummary = {
     date_to: '2026-11-11',
     timezone: 'America/Santiago',
     branch: null,
+    worker: null,
   },
   totals: {
     sessions: 1,
@@ -128,7 +171,11 @@ function renderPage() {
   );
 }
 
-function summaryHandlers(urls: { sales: string[]; cash: string[] }) {
+function summaryHandlers(urls: {
+  sales: string[];
+  cash: string[];
+  exports?: string[];
+}) {
   return [
     http.get('http://api.test/api/v1/reports/sales-summary/', ({ request }) => {
       urls.sales.push(request.url);
@@ -138,10 +185,54 @@ function summaryHandlers(urls: { sales: string[]; cash: string[] }) {
       urls.cash.push(request.url);
       return HttpResponse.json(cashSummary);
     }),
+    http.get('http://api.test/api/v1/workers/', () =>
+      HttpResponse.json({
+        count: 1,
+        next: null,
+        previous: null,
+        results: [
+          {
+            id: 'worker-1',
+            company: 'company-a',
+            membership: 'membership-1',
+            first_name: 'Ana',
+            last_name: 'Soto',
+            display_name: 'Ana Soto',
+            email: 'ana@agenda.app',
+            phone: '',
+            job_title: 'Estilista',
+            color: '#10B981',
+            branches: ['branch-1'],
+            active: true,
+            created_at: '2026-11-01T12:00:00Z',
+            updated_at: '2026-11-01T12:00:00Z',
+          },
+        ],
+      }),
+    ),
+    http.get('http://api.test/api/v1/reports/export/', ({ request }) => {
+      urls.exports?.push(request.url);
+      return new HttpResponse(new Blob(['archivo']), {
+        headers: {
+          'Content-Type': 'application/pdf',
+          'Content-Disposition': 'attachment; filename="informe-aurora.pdf"',
+        },
+      });
+    }),
   ];
 }
 
 describe('SummaryPage', () => {
+  beforeEach(() => {
+    Object.defineProperty(URL, 'createObjectURL', {
+      configurable: true,
+      value: vi.fn(() => 'blob:informe'),
+    });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() });
+  });
+
+  afterEach(() => vi.restoreAllMocks());
+
   test('muestra totales de ventas del rango por defecto', async () => {
     const urls = { sales: [] as string[], cash: [] as string[] };
     server.use(...summaryHandlers(urls));
@@ -161,6 +252,19 @@ describe('SummaryPage', () => {
     expect(urls.sales[0]).not.toContain('branch=');
   });
 
+  test('muestra citas y el desglose por trabajador', async () => {
+    const urls = { sales: [] as string[], cash: [] as string[] };
+    server.use(...summaryHandlers(urls));
+    renderPage();
+
+    expect(await screen.findByText('Citas agendadas')).toBeInTheDocument();
+    expect(screen.getByText('Citas no asistió')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Por trabajador' })).toBeInTheDocument();
+    expect(screen.getAllByText('Ana Soto').length).toBeGreaterThan(0);
+    expect(screen.getByText('Sin trabajador')).toBeInTheDocument();
+    expect(screen.getAllByText('$ 36.000').length).toBeGreaterThan(0);
+  });
+
   test('filtra por sucursal', async () => {
     const urls = { sales: [] as string[], cash: [] as string[] };
     server.use(...summaryHandlers(urls));
@@ -172,6 +276,60 @@ describe('SummaryPage', () => {
     await waitFor(() => expect(urls.sales.length).toBe(2));
     expect(urls.sales[1]).toContain('branch=branch-1');
     expect(urls.cash[1]).toContain('branch=branch-1');
+  });
+
+  test('filtra por trabajador solo en ventas', async () => {
+    const urls = { sales: [] as string[], cash: [] as string[] };
+    server.use(...summaryHandlers(urls));
+    renderPage();
+
+    await screen.findByRole('option', { name: 'Ana Soto' });
+    await screen.findByText('Corte de cabello');
+    await userEvent.selectOptions(screen.getByLabelText('Trabajador'), 'worker-1');
+
+    await waitFor(() => expect(urls.sales.length).toBe(2));
+    expect(urls.sales[1]).toContain('worker=worker-1');
+    expect(urls.cash).toHaveLength(1);
+    expect(urls.cash[0]).not.toContain('worker=');
+  });
+
+  test('aplica accesos rápidos de mes y año', async () => {
+    const urls = { sales: [] as string[], cash: [] as string[] };
+    server.use(...summaryHandlers(urls));
+    renderPage();
+
+    await screen.findByText('Corte de cabello');
+    const today = todayInZone('America/Santiago');
+    const monthStart = `${today.slice(0, 7)}-01`;
+
+    await userEvent.click(screen.getByRole('button', { name: 'Este mes' }));
+    await waitFor(() =>
+      expect(urls.sales.at(-1)).toContain(`date_from=${monthStart}`),
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'Este año' }));
+    await waitFor(() =>
+      expect(urls.sales.at(-1)).toContain(`date_from=${today.slice(0, 4)}-01-01`),
+    );
+  });
+
+  test('exporta el informe en PDF y Excel con los filtros activos', async () => {
+    const urls = { sales: [] as string[], cash: [] as string[], exports: [] as string[] };
+    server.use(...summaryHandlers(urls));
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    renderPage();
+
+    await screen.findByText('Corte de cabello');
+    await userEvent.click(screen.getByRole('button', { name: 'Exportar PDF' }));
+    await waitFor(() => expect(urls.exports).toHaveLength(1));
+    expect(urls.exports[0]).toContain('fmt=pdf');
+    expect(urls.exports[0]).toContain('date_from=');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Exportar Excel' }));
+    await waitFor(() => expect(urls.exports).toHaveLength(2));
+    expect(urls.exports[1]).toContain('fmt=excel');
+    expect(click).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(URL.createObjectURL)).toHaveBeenCalled();
   });
 
   test('muestra caja, sesiones y gastos por categoría', async () => {

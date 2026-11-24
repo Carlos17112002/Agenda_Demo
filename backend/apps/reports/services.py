@@ -3,11 +3,13 @@ from decimal import ROUND_HALF_UP, Decimal
 from zoneinfo import ZoneInfo
 
 from django.conf import settings
-from django.db.models import Count, DecimalField, ExpressionWrapper, F, Sum
+from django.db.models import Count, DecimalField, ExpressionWrapper, F, Q, Sum
 from django.db.models.functions import Round, TruncDate
 from rest_framework.exceptions import ValidationError
 
+from apps.bookings.models import Booking
 from apps.sales.models import CashSession, Expense, PaymentRecord, Sale, SaleLine
+from apps.workforce.models import WorkerProfile
 
 MONEY_FIELD = DecimalField(max_digits=18, decimal_places=4)
 
@@ -55,7 +57,31 @@ def _line_cost():
     )
 
 
-def sales_summary(*, company, date_from=None, date_to=None, branch=None):
+BOOKING_STATUS_FIELDS = {
+    "scheduled": Booking.Status.SCHEDULED,
+    "confirmed": Booking.Status.CONFIRMED,
+    "completed": Booking.Status.COMPLETED,
+    "canceled": Booking.Status.CANCELED,
+    "no_show": Booking.Status.NO_SHOW,
+}
+BOOKING_COUNT_FIELDS = ("total", *BOOKING_STATUS_FIELDS)
+
+
+def _booking_counts(queryset):
+    aggregates = {"total": Count("id")}
+    aggregates.update({
+        key: Count("id", filter=Q(status=status))
+        for key, status in BOOKING_STATUS_FIELDS.items()
+    })
+    row = queryset.aggregate(**aggregates)
+    return {key: row[key] or 0 for key in BOOKING_COUNT_FIELDS}
+
+
+def _worker_label(worker):
+    return f"{worker.first_name} {worker.last_name}".strip() or "Sin nombre"
+
+
+def sales_summary(*, company, date_from=None, date_to=None, branch=None, worker=None):
     tzinfo = _timezone_for(branch)
     start, end = _bounds(date_from, date_to, tzinfo)
 
@@ -66,6 +92,19 @@ def sales_summary(*, company, date_from=None, date_to=None, branch=None):
         sales = sales.filter(completed_at__gte=start)
     if end is not None:
         sales = sales.filter(completed_at__lt=end)
+    if worker is not None:
+        membership = worker.membership if worker.membership_id else None
+        sales = sales.filter(created_by_id=membership.user_id) if membership else sales.none()
+
+    bookings = Booking.objects.filter(company=company)
+    if branch is not None:
+        bookings = bookings.filter(branch=branch)
+    if start is not None:
+        bookings = bookings.filter(start_at__gte=start)
+    if end is not None:
+        bookings = bookings.filter(start_at__lt=end)
+    if worker is not None:
+        bookings = bookings.filter(worker=worker)
 
     lines = SaleLine.objects.filter(sale__in=sales)
     sales_stats = sales.aggregate(count=Count("id"), discounts=Sum("discount"))
@@ -139,6 +178,105 @@ def sales_summary(*, company, date_from=None, date_to=None, branch=None):
             "cost": _money(gross_row.get("cost")),
         })
 
+    booking_rows = {
+        row["worker_id"]: row
+        for row in bookings.values("worker_id").annotate(
+            total=Count("id"),
+            **{
+                key: Count("id", filter=Q(status=status))
+                for key, status in BOOKING_STATUS_FIELDS.items()
+            },
+        )
+    }
+    sales_by_user = {
+        row["created_by_id"]: row
+        for row in sales.values("created_by_id").annotate(
+            count=Count("id"), discounts=Sum("discount"),
+        )
+    }
+    lines_by_user = {
+        row["sale__created_by_id"]: row
+        for row in lines.values("sale__created_by_id").annotate(
+            gross=Sum(_line_gross()), cost=Sum(_line_cost()),
+        )
+    }
+
+    all_workers = list(
+        WorkerProfile.objects.filter(company=company)
+        .select_related("membership")
+        .order_by("last_name", "first_name")
+    )
+    member_users = {
+        item.membership.user_id: item
+        for item in all_workers
+        if item.membership_id is not None
+    }
+
+    def _worker_row(worker_obj, name, booking_row, sale_row, line_row):
+        gross = (line_row or {}).get("gross") or Decimal("0")
+        discount = (sale_row or {}).get("discounts") or Decimal("0")
+        cost = (line_row or {}).get("cost") or Decimal("0")
+        return {
+            "worker": str(worker_obj.id) if worker_obj is not None else None,
+            "worker_name": name,
+            "bookings": {
+                key: (booking_row or {}).get(key) or 0 for key in BOOKING_COUNT_FIELDS
+            },
+            "sales": (sale_row or {}).get("count") or 0,
+            "total": _money(gross - discount),
+            "profit": _money(gross - discount - cost),
+        }
+
+    if worker is not None:
+        selected_workers = [worker]
+    else:
+        selected_workers = [
+            item for item in all_workers
+            if item.active
+            or item.id in booking_rows
+            or (item.membership_id is not None and item.membership.user_id in sales_by_user)
+        ]
+
+    by_worker = []
+    for item in selected_workers:
+        user_id = item.membership.user_id if item.membership_id is not None else None
+        by_worker.append(_worker_row(
+            item,
+            _worker_label(item),
+            booking_rows.get(item.id),
+            sales_by_user.get(user_id) if user_id is not None else None,
+            lines_by_user.get(user_id) if user_id is not None else None,
+        ))
+
+    if worker is None:
+        stray = [user_id for user_id in sales_by_user if user_id not in member_users]
+        stray_count = sum(sales_by_user[user_id]["count"] or 0 for user_id in stray)
+        if stray_count:
+            by_worker.append(_worker_row(
+                None,
+                "Sin trabajador",
+                None,
+                {
+                    "count": stray_count,
+                    "discounts": sum(
+                        (sales_by_user[user_id]["discounts"] or Decimal("0") for user_id in stray),
+                        Decimal("0"),
+                    ),
+                },
+                {
+                    "gross": sum(
+                        ((lines_by_user.get(user_id) or {}).get("gross") or Decimal("0")
+                         for user_id in stray),
+                        Decimal("0"),
+                    ),
+                    "cost": sum(
+                        ((lines_by_user.get(user_id) or {}).get("cost") or Decimal("0")
+                         for user_id in stray),
+                        Decimal("0"),
+                    ),
+                },
+            ))
+
     def _top(kind):
         rows = (lines.filter(kind=kind)
                 .values("product_id", "service_id", "description", "sku")
@@ -164,6 +302,7 @@ def sales_summary(*, company, date_from=None, date_to=None, branch=None):
             "date_to": date_to.isoformat() if date_to else None,
             "timezone": tzinfo.key,
             "branch": str(branch.id) if branch is not None else None,
+            "worker": str(worker.id) if worker is not None else None,
         },
         "totals": {
             "sales": count,
@@ -175,10 +314,12 @@ def sales_summary(*, company, date_from=None, date_to=None, branch=None):
             "profit": _money(profit),
             "margin_percent": _percent((profit / total * 100) if total else Decimal("0")),
             "average_ticket": _money((total / count) if count else Decimal("0")),
+            "bookings": _booking_counts(bookings),
         },
         "by_payment_method": by_method,
         "by_day": list(daily.values()),
         "by_branch": by_branch,
+        "by_worker": by_worker,
         "top_products": _top(SaleLine.Kind.PRODUCT),
         "top_services": _top(SaleLine.Kind.SERVICE),
     }
