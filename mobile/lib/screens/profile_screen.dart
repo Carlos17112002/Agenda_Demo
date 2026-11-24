@@ -9,6 +9,7 @@ import '../state/app_state.dart';
 import '../widgets/common.dart';
 import '../widgets/outbox_panel.dart';
 import 'branding_screen.dart';
+import 'change_password_screen.dart';
 import 'create_company_screen.dart';
 
 const _permissionLabels = {
@@ -141,6 +142,42 @@ class ProfileScreen extends StatelessWidget {
                           : 'danger',
                     ),
                   ],
+                ),
+              ),
+            ),
+            const SectionLabel('Cuenta'),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: SurfaceCard(
+                padding: EdgeInsets.zero,
+                child: Material(
+                  type: MaterialType.transparency,
+                  child: ListTile(
+                    key: const Key('change-password-open'),
+                    onTap: app.busy ? null : () => _openChangePassword(context),
+                    leading: Icon(
+                      Icons.lock_reset_rounded,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                    title: const Text(
+                      'Cambiar contraseña',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    subtitle: Text(
+                      'Actualiza tu clave de acceso.',
+                      style: TextStyle(
+                        color: context.palette.muted,
+                        fontSize: 11.5,
+                      ),
+                    ),
+                    trailing: Icon(
+                      Icons.chevron_right_rounded,
+                      color: context.palette.muted,
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -464,6 +501,14 @@ class ProfileScreen extends StatelessWidget {
   void _openBranding(BuildContext context) {
     Navigator.of(context)
         .push(MaterialPageRoute(builder: (_) => const BrandingScreen()));
+  }
+
+  void _openChangePassword(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => const ChangePasswordScreen(voluntary: true),
+      ),
+    );
   }
 
   void _openCreateCompany(BuildContext context) {

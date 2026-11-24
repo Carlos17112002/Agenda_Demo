@@ -6,7 +6,9 @@ import '../state/app_state.dart';
 import '../widgets/common.dart';
 
 class ChangePasswordScreen extends StatefulWidget {
-  const ChangePasswordScreen({super.key});
+  const ChangePasswordScreen({super.key, this.voluntary = false});
+
+  final bool voluntary;
 
   @override
   State<ChangePasswordScreen> createState() => _ChangePasswordScreenState();
@@ -28,16 +30,35 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    await context.read<AppState>().changePassword(
+    final changed = await context.read<AppState>().changePassword(
       currentPassword: _current.text,
       newPassword: _next.text,
     );
+    if (!changed || !mounted || !widget.voluntary) return;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: context.palette.surface,
+        title: const Text('Contraseña actualizada'),
+        content: const Text('Tu nueva contraseña ya está activa.'),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Listo'),
+          ),
+        ],
+      ),
+    );
+    if (mounted) Navigator.of(context).pop();
   }
 
   @override
   Widget build(BuildContext context) {
     final app = context.watch<AppState>();
     return Scaffold(
+      appBar: widget.voluntary
+          ? AppBar(title: const Text('Cambiar contraseña'))
+          : null,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -49,11 +70,13 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const AppLogo(),
+                    if (!widget.voluntary) const AppLogo(),
                     const SizedBox(height: 28),
-                    const Text(
-                      'CAMBIA TU CONTRASEÑA',
-                      style: TextStyle(
+                    Text(
+                      widget.voluntary
+                          ? 'CAMBIAR CONTRASEÑA'
+                          : 'CAMBIA TU CONTRASEÑA',
+                      style: const TextStyle(
                         fontSize: 26,
                         fontWeight: FontWeight.w900,
                         letterSpacing: -0.8,
@@ -61,7 +84,9 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Usaste una clave temporal. Define una contraseña propia para continuar.',
+                      widget.voluntary
+                          ? 'Actualiza tu contraseña de acceso.'
+                          : 'Usaste una clave temporal. Define una contraseña propia para continuar.',
                       style: TextStyle(
                         color: context.palette.muted,
                         fontSize: 13,
@@ -119,10 +144,11 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                           : const Text('ACTUALIZAR CONTRASEÑA'),
                     ),
                     const SizedBox(height: 12),
-                    TextButton(
-                      onPressed: app.busy ? null : () => app.logout(),
-                      child: const Text('Cerrar sesión'),
-                    ),
+                    if (!widget.voluntary)
+                      TextButton(
+                        onPressed: app.busy ? null : () => app.logout(),
+                        child: const Text('Cerrar sesión'),
+                      ),
                   ],
                 ),
               ),

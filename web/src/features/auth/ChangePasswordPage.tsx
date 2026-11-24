@@ -1,4 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
 import { z } from 'zod';
@@ -24,8 +25,11 @@ const schema = z
 type FormValues = z.infer<typeof schema>;
 
 export function ChangePasswordPage() {
-  const { changePassword, can, hasFeature } = useAuth();
+  const { changePassword, can, hasFeature, bootstrap } = useAuth();
   const navigate = useNavigate();
+  const [changed, setChanged] = useState(false);
+  const forced = Boolean(bootstrap?.user.must_change_password);
+  const panelPath = firstAllowedPath(can, hasFeature);
   const {
     register,
     handleSubmit,
@@ -36,7 +40,11 @@ export function ChangePasswordPage() {
   const onSubmit = handleSubmit(async (values) => {
     try {
       await changePassword(values.current_password, values.new_password);
-      navigate(firstAllowedPath(can, hasFeature), { replace: true });
+      if (forced) {
+        navigate(panelPath, { replace: true });
+      } else {
+        setChanged(true);
+      }
     } catch (error) {
       const message =
         error instanceof ApiError ? error.message : 'No se pudo cambiar la contraseña.';
@@ -44,13 +52,42 @@ export function ChangePasswordPage() {
     }
   });
 
+  if (changed) {
+    return (
+      <main className="mx-auto flex min-h-screen max-w-md items-center px-6">
+        <section className="w-full rounded-lg border border-line bg-panel p-8">
+          <h1 className="text-xl font-semibold text-ink">Contraseña actualizada</h1>
+          <p className="mt-2 text-sm text-muted">
+            Tu nueva contraseña ya está activa. Puedes volver a seguir trabajando.
+          </p>
+          <Button className="mt-6" onClick={() => navigate(panelPath)}>
+            Volver al panel
+          </Button>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main className="mx-auto flex min-h-screen max-w-md items-center px-6">
       <section className="w-full rounded-lg border border-line bg-panel p-8">
-        <h1 className="text-xl font-semibold text-ink">Cambia tu contraseña</h1>
+        <h1 className="text-xl font-semibold text-ink">
+          {forced ? 'Cambia tu contraseña' : 'Cambiar contraseña'}
+        </h1>
         <p className="mt-2 text-sm text-muted">
-          Usaste una clave temporal. Define una contraseña propia para continuar.
+          {forced
+            ? 'Usaste una clave temporal. Define una contraseña propia para continuar.'
+            : 'Actualiza tu contraseña de acceso.'}
         </p>
+        {!forced ? (
+          <button
+            type="button"
+            className="mt-3 text-sm font-medium text-brand hover:underline"
+            onClick={() => navigate(panelPath)}
+          >
+            ← Volver al panel
+          </button>
+        ) : null}
         <form className="mt-6 space-y-4" onSubmit={onSubmit} noValidate>
           {errors.root?.message ? <ErrorBanner message={errors.root.message} /> : null}
           <Field

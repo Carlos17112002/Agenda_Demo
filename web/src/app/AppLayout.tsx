@@ -95,6 +95,12 @@ export function AppLayout() {
             {user?.email}
           </p>
           <p>{bootstrap?.membership.role_display}</p>
+          <NavLink
+            to="/cambiar-clave"
+            className="mt-1 inline-block font-medium text-brand hover:underline"
+          >
+            Cambiar contraseña
+          </NavLink>
         </div>
       </aside>
 

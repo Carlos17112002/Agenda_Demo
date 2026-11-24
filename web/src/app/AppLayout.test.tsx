@@ -36,6 +36,10 @@ describe('AppLayout', () => {
     expect(screen.queryByRole('link', { name: 'Resumen' })).not.toBeInTheDocument();
     expect(screen.getByText('owner@agenda.app')).toBeInTheDocument();
     expect(screen.getByText('Contenido de agenda')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Cambiar contraseña' })).toHaveAttribute(
+      'href',
+      '/cambiar-clave',
+    );
   });
 
   test('permite cambiar de empresa', async () => {
