@@ -45,6 +45,37 @@ services:
       - key: AGENDA_SUPERADMIN_FIRST_NAME
         sync: false
 
+  # Recordatorio de reservas a 24 h. Los cron jobs de Render no existen en el
+  # plan free: al pasar la cuenta a Starter o superior, descomenta este bloque.
+  # - type: cron
+  #   name: agenda-demo-reminders
+  #   runtime: python
+  #   plan: starter
+  #   region: virginia
+  #   branch: master
+  #   rootDir: backend
+  #   schedule: "0 * * * *"
+  #   buildCommand: pip install -r requirements.txt
+  #   startCommand: python manage.py send_booking_reminders
+  #   envVars:
+  #     - key: DJANGO_DEBUG
+  #       value: "false"
+  #     - key: DJANGO_SECRET_KEY
+  #       fromService:
+  #         name: agenda-demo-api
+  #         type: web
+  #         envVarKey: DJANGO_SECRET_KEY
+  #     - key: AGENDA_USE_POSTGRES
+  #       value: "true"
+  #     - key: DATABASE_URL
+  #       fromDatabase:
+  #         name: agenda-demo-db
+  #         property: connectionString
+  #     - key: AGENDA_PUBLIC_BASE_URL
+  #       value: https://agenda-demo-api.onrender.com
+  #     - key: DJANGO_EMAIL_BACKEND
+  #       value: django.core.mail.backends.locmem.EmailBackend
+
   - type: web
     name: agenda-demo-panel
     runtime: static

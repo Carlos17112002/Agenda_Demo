@@ -163,6 +163,8 @@ Variables: `DJANGO_SECRET_KEY`, `DJANGO_DEBUG`, `DJANGO_ALLOWED_HOSTS`, `DJANGO_
 
 `render.yaml` define una API Django (Gunicorn + WhiteNoise) con PostgreSQL gratuito y el panel web como sitio estático. En Render: **New → Blueprint**, conecta el repositorio y completa las variables marcadas como secretas (`AGENDA_SUPERADMIN_EMAIL`, `AGENDA_SUPERADMIN_PASSWORD`, `AGENDA_SUPERADMIN_FIRST_NAME`).
 
+El cron job que envía los recordatorios de reservas a 24 horas (`send_booking_reminders`, cada hora) está definido pero comentado porque Render no ofrece cron jobs en el plan free; al pasar la cuenta a Starter o superior, descomenta ese bloque del blueprint.
+
 Cuando ambos servicios estén vivos:
 
 - Panel: `https://agenda-demo-panel.onrender.com`
