@@ -324,6 +324,12 @@ button:focus-visible {
 .actions { display: flex; gap: 10px; flex-wrap: wrap; }
 .actions button { flex: 1 1 180px; }
 
+.reschedule {
+  margin-top: 22px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+
 .footer {
   width: min(1080px, calc(100% - 40px));
   margin: 0 auto;

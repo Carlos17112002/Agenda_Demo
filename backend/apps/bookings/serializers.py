@@ -10,6 +10,7 @@ from .availability import (
     service_available_at_branch, validate_search_date, worker_available_at_branch,
 )
 from .models import Booking
+from .services import public_reschedule_allowed
 
 
 def _tenant(request):
@@ -92,11 +93,16 @@ class TransitionSerializer(serializers.Serializer):
     reason = serializers.CharField(required=False, allow_blank=True, max_length=240)
 
 
+class PublicRescheduleSerializer(serializers.Serializer):
+    start_at = serializers.DateTimeField()
+
+
 class AvailabilityQuerySerializer(serializers.Serializer):
     branch = serializers.PrimaryKeyRelatedField(queryset=Branch.objects.all())
     service = serializers.PrimaryKeyRelatedField(queryset=Service.objects.all())
     worker = serializers.PrimaryKeyRelatedField(queryset=WorkerProfile.objects.all())
     date = serializers.DateField()
+    exclude_booking = serializers.CharField(required=False, allow_blank=False, max_length=16)
 
     def validate(self, attrs):
         company = self.context.get("company") or _tenant(self.context["request"])
@@ -112,6 +118,13 @@ class AvailabilityQuerySerializer(serializers.Serializer):
         if not worker_available_at_branch(worker, branch):
             raise serializers.ValidationError({"worker": "El trabajador no atiende en esta sucursal."})
         validate_search_date(branch, attrs["date"])
+        attrs["exclude_pk"] = None
+        code = attrs.pop("exclude_booking", "")
+        if code:
+            booking = Booking.objects.filter(company=company, public_code__iexact=code).first()
+            if booking is None or booking.worker_id != worker.id:
+                raise serializers.ValidationError({"exclude_booking": "Reserva no encontrada."})
+            attrs["exclude_pk"] = booking.pk
         return attrs
 
 
@@ -134,20 +147,28 @@ class PublicBookingCreateSerializer(serializers.Serializer):
 
 
 class PublicBookingSerializer(serializers.ModelSerializer):
+    branch = serializers.UUIDField(source="branch_id", read_only=True)
     branch_name = serializers.CharField(source="branch.name", read_only=True)
     branch_timezone = serializers.CharField(source="branch.timezone", read_only=True)
+    service = serializers.UUIDField(source="service_id", read_only=True)
+    worker = serializers.UUIDField(source="worker_id", read_only=True)
     worker_name = serializers.SerializerMethodField()
     customer_first_name = serializers.CharField(source="customer.first_name", read_only=True)
     status_display = serializers.CharField(source="get_status_display", read_only=True)
+    can_reschedule = serializers.SerializerMethodField()
 
     class Meta:
         model = Booking
         fields = [
             "public_code", "status", "status_display", "service_name", "worker_name",
-            "branch_name", "branch_timezone", "start_at", "end_at", "duration_minutes",
-            "price", "customer_first_name", "created_at",
+            "branch", "branch_name", "branch_timezone", "service", "worker", "start_at",
+            "end_at", "duration_minutes", "price", "customer_first_name", "can_reschedule",
+            "created_at",
         ]
         read_only_fields = fields
 
     def get_worker_name(self, obj):
         return str(obj.worker)
+
+    def get_can_reschedule(self, obj):
+        return public_reschedule_allowed(obj)

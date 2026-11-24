@@ -1,8 +1,10 @@
+from datetime import timedelta
 from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.core.mail import send_mail
 from django.db import transaction
+from django.urls import reverse
 from django.utils import timezone
 
 from .models import Notification
@@ -13,7 +15,18 @@ SUBJECTS = {
     Notification.Kind.BOOKING_CONFIRMED: "Reserva confirmada",
     Notification.Kind.BOOKING_RESCHEDULED: "Reserva reprogramada",
     Notification.Kind.BOOKING_CANCELED: "Reserva cancelada",
+    Notification.Kind.BOOKING_REMINDER: "Recordatorio de tu reserva",
 }
+
+REMINDER_LEAD = timedelta(hours=24)
+REMINDER_WINDOW = timedelta(hours=1)
+
+
+def booking_public_links(booking):
+    """Cancel and reschedule links served by the public booking page."""
+    page = reverse("public-booking-page-reservation", args=[booking.company.slug, booking.public_code])
+    base = settings.PUBLIC_BASE_URL.rstrip("/")
+    return f"{base}{page}", f"{base}{page}?reagendar=1"
 
 
 def _local_range(booking):
@@ -26,10 +39,14 @@ def _local_range(booking):
 
 def _compose(booking, kind):
     subject = f"{SUBJECTS[kind]} · {booking.service_name} · {booking.company.name}"[:200]
+    if kind == Notification.Kind.BOOKING_REMINDER:
+        intro = f"Te recordamos tu reserva {booking.public_code} en {booking.company.name}."
+    else:
+        intro = f"Tu reserva {booking.public_code} en {booking.company.name} está {SUBJECTS[kind].lower()}."
     lines = [
         f"Hola {booking.customer.first_name},",
         "",
-        f"Tu reserva {booking.public_code} en {booking.company.name} está {SUBJECTS[kind].lower()}.",
+        intro,
         "",
         f"Servicio: {booking.service_name}",
         f"Profesional: {booking.worker}",
@@ -39,8 +56,14 @@ def _compose(booking, kind):
     ]
     if kind == Notification.Kind.BOOKING_CANCELED and booking.canceled_reason:
         lines.append(f"Motivo: {booking.canceled_reason}")
-    lines += ["", "Si necesitas cambiar tu reserva, contacta a la sucursal.", "",
-              f"Código de reserva: {booking.public_code}"]
+    lines.append("")
+    if kind == Notification.Kind.BOOKING_REMINDER:
+        cancel_url, reschedule_url = booking_public_links(booking)
+        lines += ["¿No puedes asistir? Cancela o reagenda aquí:",
+                  f"Cancelar: {cancel_url}", f"Reagendar: {reschedule_url}"]
+    else:
+        lines.append("Si necesitas cambiar tu reserva, contacta a la sucursal.")
+    lines += ["", f"Código de reserva: {booking.public_code}"]
     return subject, "\n".join(lines)
 
 
@@ -73,3 +96,36 @@ def queue_booking_notification(booking, kind):
     )
     transaction.on_commit(lambda: deliver_notification(notification.pk))
     return notification
+
+
+def send_due_reminders(now=None):
+    """Queue 24h reminders for active bookings starting within the next hour-ish window.
+
+    Meant to run hourly: bookings are selected when they enter the 24-25 hour
+    window, pending/sent reminders are skipped so each booking is reminded once,
+    and failed deliveries are retried by the following run.
+    """
+    from apps.bookings.models import Booking
+
+    now = now or timezone.now()
+    window_start = now + REMINDER_LEAD
+    window_end = window_start + REMINDER_WINDOW
+    candidates = (Booking.objects.filter(
+        status__in=Booking.ACTIVE_STATUSES, start_at__gte=window_start, start_at__lt=window_end,
+    ).exclude(customer__email="").values_list("pk", flat=True))
+
+    queued = skipped = 0
+    for pk in list(candidates):
+        with transaction.atomic():
+            booking = (Booking.objects.select_for_update()
+                       .select_related("company", "branch", "customer", "worker", "service")
+                       .get(pk=pk))
+            already = Notification.objects.filter(
+                booking=booking, kind=Notification.Kind.BOOKING_REMINDER,
+                status__in=[Notification.Status.PENDING, Notification.Status.SENT],
+            ).exists()
+            if already or queue_booking_notification(booking, Notification.Kind.BOOKING_REMINDER) is None:
+                skipped += 1
+            else:
+                queued += 1
+    return {"queued": queued, "skipped": skipped}

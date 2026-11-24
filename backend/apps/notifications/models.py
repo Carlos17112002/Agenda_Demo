@@ -13,6 +13,7 @@ class Notification(TenantScopedModel):
         BOOKING_CONFIRMED = "booking_confirmed", "Reserva confirmada"
         BOOKING_RESCHEDULED = "booking_rescheduled", "Reserva reprogramada"
         BOOKING_CANCELED = "booking_canceled", "Reserva cancelada"
+        BOOKING_REMINDER = "booking_reminder", "Recordatorio de reserva"
 
     class Status(models.TextChoices):
         PENDING = "pending", "Pendiente"

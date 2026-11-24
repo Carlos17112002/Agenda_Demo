@@ -14,7 +14,7 @@ from apps.identity.views import (
 )
 from apps.bookings.public import (
     PublicAvailabilityView, PublicBookingCancelView, PublicBookingCreateView,
-    PublicBookingDetailView, PublicCompanyView,
+    PublicBookingDetailView, PublicBookingRescheduleView, PublicCompanyView,
 )
 from apps.bookings.public_page import PublicBookingPageView
 from apps.billing.views import (
@@ -109,6 +109,10 @@ urlpatterns = [
     path("api/v1/public/<slug:slug>/bookings/", PublicBookingCreateView.as_view(), name="public-booking-create"),
     path("api/v1/public/<slug:slug>/bookings/<str:code>/", PublicBookingDetailView.as_view(), name="public-booking-detail"),
     path("api/v1/public/<slug:slug>/bookings/<str:code>/cancel/", PublicBookingCancelView.as_view(), name="public-booking-cancel"),
+    path(
+        "api/v1/public/<slug:slug>/bookings/<str:code>/reschedule/",
+        PublicBookingRescheduleView.as_view(), name="public-booking-reschedule",
+    ),
     path("b/<slug:slug>/", PublicBookingPageView.as_view(), name="public-booking-page"),
     path(
         "b/<slug:slug>/reserva/<str:code>/",

@@ -1,6 +1,7 @@
 from datetime import timedelta
 from datetime import timezone as dt_timezone
 
+from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 from rest_framework import status
@@ -53,6 +54,13 @@ def _require_future_start(branch, start_at):
     if start_at <= timezone.now():
         raise ValidationError({"start_at": "La reserva debe ser futura."})
     validate_search_date(branch, _local_day(branch, start_at))
+
+
+def public_reschedule_allowed(booking):
+    if booking.status not in Booking.ACTIVE_STATUSES:
+        return False
+    cutoff = timedelta(hours=getattr(settings, "PUBLIC_RESCHEDULE_CUTOFF_HOURS", 2))
+    return booking.start_at - timezone.now() > cutoff
 
 
 def create_booking(*, company, branch, service, worker, customer, start_at,

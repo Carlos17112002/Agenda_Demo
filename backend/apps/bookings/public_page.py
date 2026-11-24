@@ -25,6 +25,7 @@ class PublicBookingPageView(View):
             "bookings_url": reverse("public-booking-create", args=[company.slug]),
             "detail_base": reverse("public-booking-detail", args=[company.slug, "CODE"]),
             "cancel_base": reverse("public-booking-cancel", args=[company.slug, "CODE"]),
+            "reschedule_base": reverse("public-booking-reschedule", args=[company.slug, "CODE"]),
         }
         response = render(request, self.template_name, context)
         response["Cache-Control"] = "no-store"

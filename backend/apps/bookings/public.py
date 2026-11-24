@@ -1,5 +1,6 @@
 from datetime import timezone as dt_timezone
 
+from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 from rest_framework import status
@@ -18,10 +19,11 @@ from .availability import branch_timezone, worker_slots
 from .models import Booking
 from .serializers import (
     AvailabilityQuerySerializer, PublicBookingCreateSerializer, PublicBookingSerializer,
-    TransitionSerializer,
+    PublicRescheduleSerializer, TransitionSerializer,
 )
 from .services import (
-    InvalidBookingState, create_booking, resolve_public_customer, transition_booking,
+    InvalidBookingState, create_booking, public_reschedule_allowed, resolve_public_customer,
+    reschedule_booking, transition_booking,
 )
 
 
@@ -116,7 +118,7 @@ class PublicAvailabilityView(PublicBaseView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
         slots = worker_slots(company=company, branch=data["branch"], service=data["service"],
-                             worker=data["worker"], day=data["date"])
+                             worker=data["worker"], day=data["date"], exclude_pk=data["exclude_pk"])
         return Response(slots_payload(data["branch"], data["date"], slots))
 
 
@@ -166,5 +168,25 @@ class PublicBookingCancelView(PublicBaseView):
         booking = transition_booking(
             booking=booking, action="cancel", actor=None,
             reason=serializer.validated_data.get("reason", ""),
+        )
+        return Response(PublicBookingSerializer(booking).data)
+
+
+class PublicBookingRescheduleView(PublicBaseView):
+    def post(self, request, slug, code):
+        company = public_company(slug)
+        booking = find_public_booking(company, code)
+        serializer = PublicRescheduleSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        if booking.status not in Booking.ACTIVE_STATUSES:
+            raise InvalidBookingState("La reserva ya no se puede reprogramar.")
+        if not public_reschedule_allowed(booking):
+            cutoff = getattr(settings, "PUBLIC_RESCHEDULE_CUTOFF_HOURS", 2)
+            raise InvalidBookingState(
+                f"Faltan menos de {cutoff} horas para tu reserva; contacta a la sucursal para cambiarla."
+            )
+        booking = reschedule_booking(
+            booking=booking, start_at=serializer.validated_data["start_at"],
+            actor=None, reason="Reagendado por el cliente",
         )
         return Response(PublicBookingSerializer(booking).data)

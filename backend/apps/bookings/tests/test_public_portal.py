@@ -13,7 +13,7 @@ from apps.tenancy.models import Branch, Company
 from apps.tenancy.tests.utils import make_company
 from apps.workforce.models import WorkerProfile
 
-from .utils import BookingScenarioMixin, future_day, local_dt, utc_iso
+from .utils import BookingScenarioMixin, future_day, local_dt, parse_api_datetime, utc_iso
 
 
 class PublicPortalTests(BookingScenarioMixin, TestCase):
@@ -184,4 +184,99 @@ class PublicPortalTests(BookingScenarioMixin, TestCase):
         code = created.data["public_code"]
         make_company("agenda-b", "Agenda B")
         response = self.public.get(f"/api/v1/public/agenda-b/bookings/{code}/")
+        self.assertEqual(response.status_code, 404)
+
+    def test_public_availability_can_ignore_the_booking_being_rescheduled(self):
+        with self.captureOnCommitCallbacks(execute=True):
+            created = self.public_booking()
+        code = created.data["public_code"]
+        self.assertNotIn("10:00", [slot["label"] for slot in self.public_availability().data["slots"]])
+
+        response = self.public_availability(exclude_booking=code)
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertIn("10:00", [slot["label"] for slot in response.data["slots"]])
+
+        self.assertEqual(self.public_availability(exclude_booking="NOEXISTE").status_code, 400)
+
+    def test_public_booking_detail_exposes_reschedule_data(self):
+        with self.captureOnCommitCallbacks(execute=True):
+            created = self.public_booking()
+        detail = self.public.get(self.url(f"bookings/{created.data['public_code']}/"))
+        self.assertEqual(detail.status_code, 200, detail.data)
+        self.assertEqual(detail.data["branch"], str(self.branch.id))
+        self.assertEqual(detail.data["service"], str(self.service.id))
+        self.assertEqual(detail.data["worker"], str(self.worker.id))
+        self.assertTrue(detail.data["can_reschedule"])
+
+    def test_public_reschedule_moves_booking_and_notifies(self):
+        with self.captureOnCommitCallbacks(execute=True):
+            created = self.public_booking()
+        booking = Booking.objects.get(public_code=created.data["public_code"])
+
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.public.post(
+                self.url(f"bookings/{booking.public_code}/reschedule/"),
+                {"start_at": utc_iso(local_dt(self.day, 11))}, format="json",
+            )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["public_code"], booking.public_code)
+        self.assertEqual(parse_api_datetime(response.data["start_at"]), local_dt(self.day, 11))
+        booking.refresh_from_db()
+        self.assertEqual(booking.start_at, local_dt(self.day, 11))
+        self.assertEqual(booking.status, Booking.Status.SCHEDULED)
+        self.assertEqual(
+            Notification.objects.filter(booking=booking, kind=Notification.Kind.BOOKING_RESCHEDULED).count(), 1,
+        )
+        labels = [slot["label"] for slot in self.public_availability().data["slots"]]
+        self.assertIn("10:00", labels)
+        self.assertNotIn("11:00", labels)
+
+    def test_public_reschedule_rejects_busy_slots(self):
+        with self.captureOnCommitCallbacks(execute=True):
+            first = self.public_booking(local_dt(self.day, 10))
+            self.public_booking(local_dt(self.day, 11))
+        response = self.public.post(
+            self.url(f"bookings/{first.data['public_code']}/reschedule/"),
+            {"start_at": utc_iso(local_dt(self.day, 11))}, format="json",
+        )
+        self.assertEqual(response.status_code, 409, response.data)
+        self.assertEqual(Booking.objects.get(public_code=first.data["public_code"]).start_at, local_dt(self.day, 10))
+
+    def test_public_reschedule_respects_the_two_hour_cutoff(self):
+        with self.captureOnCommitCallbacks(execute=True):
+            created = self.public_booking()
+        booking = Booking.objects.get(public_code=created.data["public_code"])
+        soon = timezone.now() + timedelta(hours=1)
+        booking.start_at = soon
+        booking.end_at = soon + timedelta(minutes=30)
+        booking.block_start = soon
+        booking.block_end = soon + timedelta(minutes=30)
+        booking.save(update_fields=["start_at", "end_at", "block_start", "block_end"])
+
+        detail = self.public.get(self.url(f"bookings/{booking.public_code}/"))
+        self.assertFalse(detail.data["can_reschedule"])
+        response = self.public.post(
+            self.url(f"bookings/{booking.public_code}/reschedule/"),
+            {"start_at": utc_iso(local_dt(self.day, 11))}, format="json",
+        )
+        self.assertEqual(response.status_code, 409, response.data)
+
+    def test_public_reschedule_rejects_canceled_bookings(self):
+        with self.captureOnCommitCallbacks(execute=True):
+            created = self.public_booking()
+            self.public.post(self.url(f"bookings/{created.data['public_code']}/cancel/"), {}, format="json")
+        response = self.public.post(
+            self.url(f"bookings/{created.data['public_code']}/reschedule/"),
+            {"start_at": utc_iso(local_dt(self.day, 11))}, format="json",
+        )
+        self.assertEqual(response.status_code, 409, response.data)
+
+    def test_public_reschedule_codes_are_not_visible_across_companies(self):
+        with self.captureOnCommitCallbacks(execute=True):
+            created = self.public_booking()
+        make_company("agenda-b", "Agenda B")
+        response = self.public.post(
+            f"/api/v1/public/agenda-b/bookings/{created.data['public_code']}/reschedule/",
+            {"start_at": utc_iso(local_dt(self.day, 11))}, format="json",
+        )
         self.assertEqual(response.status_code, 404)

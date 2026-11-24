@@ -34,6 +34,12 @@
   const cancelError = $('cancel-error');
   const cancelButton = $('cancel-booking');
   const newBookingButton = $('new-booking');
+  const rescheduleError = $('reschedule-error');
+  const rescheduleButton = $('reschedule-booking');
+  const reschedulePanel = $('reschedule-panel');
+  const rescheduleDate = $('reschedule-date');
+  const rescheduleSlots = $('reschedule-slots');
+  const rescheduleStatus = $('reschedule-status');
 
   const branches = Array.isArray(company.branches) ? company.branches : [];
   const services = Array.isArray(company.services) ? company.services : [];
@@ -43,8 +49,11 @@
     bookings: root.dataset.bookingsUrl,
     detail: root.dataset.detailBase,
     cancel: root.dataset.cancelBase,
+    reschedule: root.dataset.rescheduleBase,
   };
-  const state = { serviceId: null, slot: null, booking: null, requestId: 0 };
+  const state = {
+    serviceId: null, slot: null, booking: null, requestId: 0, rescheduleRequestId: 0,
+  };
 
   const motion = () =>
     window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
@@ -326,12 +335,113 @@
     appendDetail('Duración', booking.duration_minutes ? `${booking.duration_minutes} min` : '');
     appendDetail('Valor', formatMoney(booking.price));
     cancelButton.hidden = !['scheduled', 'confirmed'].includes(booking.status);
+    rescheduleButton.hidden = !booking.can_reschedule;
+    hideReschedulePanel();
+    rescheduleError.classList.remove('is-success');
+    showError(rescheduleError, '');
     cancelError.classList.remove('is-success');
     showError(cancelError, '');
     window.scrollTo({ top: 0, behavior: motion() });
   }
 
-  async function loadReservation(code) {
+  function hideReschedulePanel() {
+    state.rescheduleRequestId += 1;
+    reschedulePanel.hidden = true;
+    rescheduleButton.textContent = 'Reagendar';
+    rescheduleDate.value = '';
+    rescheduleStatus.textContent = 'Elige una fecha.';
+    clear(rescheduleSlots);
+  }
+
+  function openReschedulePanel() {
+    const booking = state.booking;
+    if (!booking || !booking.can_reschedule) return;
+    const today = todayIn(booking.branch_timezone);
+    rescheduleDate.min = today;
+    if (!rescheduleDate.value || rescheduleDate.value < today) rescheduleDate.value = today;
+    reschedulePanel.hidden = false;
+    rescheduleButton.textContent = 'Ocultar horarios';
+    loadRescheduleSlots();
+    reschedulePanel.scrollIntoView({ behavior: motion(), block: 'start' });
+  }
+
+  async function loadRescheduleSlots() {
+    const booking = state.booking;
+    if (!booking) return;
+    const requestId = ++state.rescheduleRequestId;
+    clear(rescheduleSlots);
+    const date = rescheduleDate.value;
+    if (!date) {
+      rescheduleStatus.textContent = 'Elige una fecha.';
+      return;
+    }
+    rescheduleStatus.textContent = 'Buscando horarios…';
+    showError(rescheduleError, '');
+    try {
+      const params = new URLSearchParams({
+        branch: booking.branch,
+        service: booking.service,
+        worker: booking.worker,
+        date,
+        exclude_booking: booking.public_code,
+      });
+      const response = await fetch(`${endpoints.availability}?${params.toString()}`, {
+        headers: { Accept: 'application/json' },
+      });
+      const data = await response.json().catch(() => ({}));
+      if (requestId !== state.rescheduleRequestId) return;
+      if (!response.ok) throw new Error(firstError(data, 'No pudimos cargar los horarios.'));
+      const currentStart = booking.start_at ? new Date(booking.start_at).getTime() : null;
+      const slots = (Array.isArray(data.slots) ? data.slots : [])
+        .filter((slot) => currentStart === null || new Date(slot.start_at).getTime() !== currentStart);
+      if (!slots.length) {
+        rescheduleStatus.textContent = 'No quedan cupos para esa fecha. Prueba otro día.';
+        return;
+      }
+      rescheduleStatus.textContent = `${slots.length} horario${slots.length === 1 ? '' : 's'} disponible${slots.length === 1 ? '' : 's'}`;
+      slots.forEach((slot) => {
+        const button = el('button', 'slot', slot.label);
+        button.type = 'button';
+        button.addEventListener('click', () => rescheduleTo(slot, button));
+        rescheduleSlots.append(button);
+      });
+    } catch (error) {
+      if (requestId !== state.rescheduleRequestId) return;
+      rescheduleStatus.textContent = error.message;
+    }
+  }
+
+  async function rescheduleTo(slot, button) {
+    const booking = state.booking;
+    if (!booking || !booking.public_code) return;
+    const buttons = Array.from(rescheduleSlots.children);
+    buttons.forEach((node) => { node.disabled = true; });
+    button.classList.add('is-selected');
+    showError(rescheduleError, '');
+    rescheduleStatus.textContent = 'Reagendando…';
+    try {
+      const response = await fetch(
+        endpoints.reschedule.replace('CODE', encodeURIComponent(booking.public_code)),
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ start_at: slot.start_at }),
+        },
+      );
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(firstError(data, 'No pudimos reagendar la reserva.'));
+      showConfirmation(data);
+      showError(rescheduleError, 'Reserva reprogramada correctamente.');
+      rescheduleError.classList.add('is-success');
+    } catch (error) {
+      showError(rescheduleError, error.message);
+      rescheduleStatus.textContent = '';
+      buttons.forEach((node) => { node.disabled = false; });
+      button.classList.remove('is-selected');
+    }
+  }
+
+  async function loadReservation(code, openReschedule = false) {
     try {
       const response = await fetch(
         endpoints.detail.replace('CODE', encodeURIComponent(code)),
@@ -340,6 +450,7 @@
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(firstError(data, 'No encontramos esa reserva.'));
       showConfirmation(data);
+      if (openReschedule && data.can_reschedule) openReschedulePanel();
     } catch (error) {
       bookingView.hidden = true;
       confirmationView.hidden = false;
@@ -349,6 +460,8 @@
       confirmationCode.textContent = code;
       clear(confirmationDetail);
       cancelButton.hidden = true;
+      rescheduleButton.hidden = true;
+      hideReschedulePanel();
       showError(cancelError, error.message);
     }
   }
@@ -426,6 +539,13 @@
     }
   });
 
+  rescheduleButton.addEventListener('click', () => {
+    if (reschedulePanel.hidden) openReschedulePanel();
+    else hideReschedulePanel();
+  });
+
+  rescheduleDate.addEventListener('change', loadRescheduleSlots);
+
   newBookingButton.addEventListener('click', () => {
     state.booking = null;
     state.slot = null;
@@ -477,5 +597,8 @@
   }
 
   const initialCode = String(root.dataset.initialCode || '').trim();
-  if (initialCode) loadReservation(initialCode);
+  if (initialCode) {
+    const wantsReschedule = new URLSearchParams(window.location.search).get('reagendar') === '1';
+    loadReservation(initialCode, wantsReschedule);
+  }
 })();

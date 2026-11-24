@@ -32,6 +32,7 @@
         data-bookings-url="{{ bookings_url }}"
         data-detail-base="{{ detail_base }}"
         data-cancel-base="{{ cancel_base }}"
+        data-reschedule-base="{{ reschedule_base }}"
         data-initial-code="{{ initial_code }}"
         data-primary-color="{{ branding.primary_color }}">
     <noscript>
@@ -42,7 +43,7 @@
       <div class="intro">
         <p class="eyebrow">Agenda tu visita</p>
         <h2 id="booking-heading">Elige servicio, profesional y horario.</h2>
-        <p class="lede">Te enviaremos la confirmación por correo. Puedes cancelar en línea con tu código de reserva.</p>
+        <p class="lede">Te enviaremos la confirmación por correo. Puedes cancelar o reagendar en línea con tu código de reserva.</p>
       </div>
 
       <div id="load-error" class="alert" role="alert" hidden></div>
@@ -124,9 +125,29 @@
         <p class="code" id="confirmation-code"></p>
         <dl class="detail-list" id="confirmation-detail"></dl>
         <div id="cancel-error" class="alert" role="alert" hidden></div>
+        <div id="reschedule-error" class="alert" role="alert" hidden></div>
         <div class="actions">
           <button id="cancel-booking" class="danger" type="button">Cancelar reserva</button>
+          <button id="reschedule-booking" class="ghost" type="button" hidden>Reagendar</button>
           <button id="new-booking" class="ghost" type="button">Hacer otra reserva</button>
+        </div>
+
+        <div id="reschedule-panel" class="reschedule" role="region" aria-labelledby="reschedule-heading" hidden>
+          <div class="panel-head">
+            <span class="step" aria-hidden="true">↻</span>
+            <h3 id="reschedule-heading">Cambiar fecha u hora</h3>
+          </div>
+          <div class="field-grid">
+            <label class="field">
+              <span>Nueva fecha</span>
+              <input id="reschedule-date" type="date" required>
+            </label>
+          </div>
+          <div class="slots-head">
+            <h4>Horarios disponibles</h4>
+            <span id="reschedule-status" class="muted" role="status">Elige una fecha.</span>
+          </div>
+          <div id="reschedule-slots" class="slot-grid" role="group" aria-label="Horarios para reagendar"></div>
         </div>
       </div>
     </section>
